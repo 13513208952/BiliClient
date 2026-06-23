@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BiliClient</string>
+
+    <!-- TV 模式导航 -->
+    <string name="tv_tab_home">首页</string>
+    <string name="tv_tab_browse">浏览</string>
+    <string name="tv_tab_desktop">桌面</string>
+    <string name="tv_tab_mine">我的</string>
+
+    <!-- 模式切换 -->
+    <string name="tv_mode_label">电视模式</string>
+    <string name="tv_mode_desc">横屏显示，支持遥控器 / 鼠标 / 触控三种输入</string>
+    <string name="switch_to_phone">切换到手机模式</string>
+    <string name="switch_to_tv">切换到电视模式</string>
+
+    <!-- 设置页 -->
+    <string name="settings_section_display">显示模式</string>
+
+    <!-- 弹幕 -->
+    <string name="danmaku_preview_sample">弹幕预览  Danmaku 示例</string>
+
+    <!-- 控制层 -->
+    <string name="ctrl_play">播放</string>
+    <string name="ctrl_pause">暂停</string>
+    <string name="ctrl_like">点赞</string>
+    <string name="ctrl_triple">三连</string>
+    <string name="ctrl_coin">投币</string>
+    <string name="ctrl_fav">收藏</string>
+    <string name="ctrl_danmaku">弹幕</string>
+    <string name="ctrl_quality">清晰度</string>
+    <string name="ctrl_speed">速度</string>
+
+    <!-- 清晰度 -->
+    <string name="quality_8k">8K</string>
+    <string name="quality_dolby_vision">杜比视界</string>
+    <string name="quality_hdr">HDR 真彩</string>
+    <string name="quality_4k">4K 超清</string>
+    <string name="quality_1080p60">1080P 60帧</string>
+    <string name="quality_1080p_plus">1080P 高码率</string>
+    <string name="quality_smart">智能修复</string>
+    <string name="quality_1080p">1080P 高清</string>
+    <string name="quality_720p">720P 高清</string>
+    <string name="quality_480p">480P 清晰</string>
+    <string name="quality_360p">360P 流畅</string>
+
+    <!-- 桌面 -->
+    <string name="desktop_empty_hint">桌面还没有应用</string>
+    <string name="desktop_add_app">添加应用</string>
+    <string name="desktop_manage">管理</string>
+    <string name="desktop_manage_title">管理桌面应用</string>
+    <string name="desktop_loading">加载中…</string>
+
+    <!-- 桌面删除（需求②） -->
+    <string name="desktop_remove_from_desktop">从桌面移除</string>
+    <string name="desktop_remove_mode_title">批量移除快捷方式</string>
+    <string name="desktop_remove_selected">移除 %d 个</string>
+    <string name="desktop_remove_hint">按 Menu 键或长按图标可进入移除模式</string>
+
+    <!-- TV 界面缩放（需求①） -->
+    <string name="tv_ui_scale_label">界面缩放</string>
+    <string name="tv_ui_scale_hint">拖动滑块实时调整 TV 界面整体大小</string>
+    <string name="tv_ui_scale_affect_note">仅影响电视模式 UI（图标/文字/间距同步缩放）</string>
+
+    <!-- TV 子页面标题（需求③） -->
+    <string name="tv_settings_title">设置</string>
+    <string name="tv_fav_title">我的收藏</string>
+    <string name="tv_history_title">观看历史</string>
+    <string name="tv_downloads_title">我的下载</string>
+    <string name="tv_mine_login_hint">请先登录以查看内容</string>
+
+    <!-- 返回（需求④⑤） -->
+    <string name="back">返回</string>
+    <string name="tv_fullscreen_back_hint">按返回键或点击左上角箭头退出全屏</string>
+
+    <!-- 批量移除操作按钮（需求②） -->
+    <string name="tv_remove_confirm">移除</string>
+    <string name="tv_remove_cancel">取消</string>
+    <string name="tv_selected_count">已选 %d 个</string>
+
+    <!-- TV 搜索面板（需求⑥） -->
+    <string name="tv_search_title">TV 搜索</string>
+    <string name="tv_search_hint">输入搜索词...</string>
+    <string name="tv_search_open_keyboard">开启软键盘以输入</string>
+    <string name="tv_search_submit">搜索</string>
+    <string name="tv_search_history_title">最近搜索</string>
+    <string name="tv_search_history_clear">清空</string>
+    <string name="tv_search_history_empty">暂无搜索历史</string>
+    <string name="tv_search_no_more">没有更多了</string>
+    <string name="tv_search_empty_hint">输入关键词开始搜索</string>
+    <string name="tv_kb_mode_cn">中</string>
+    <string name="tv_kb_mode_en">EN</string>
+    <string name="tv_kb_space_cn">空格</string>
+    <string name="tv_kb_space_en">Space</string>
+    <string name="tv_kb_backspace">⌫</string>
+    <string name="tv_kb_cursor_left">◀</string>
+    <string name="tv_kb_cursor_right">▶</string>
+    <string name="tv_kb_close">↓收起</string>
+    <string name="tv_mine_search">搜索</string>
+
+    <!-- TV 导航与退出（需求 N1/N5） -->
+    <string name="tv_back_to_exit">再按一次返回键退出 App</string>
+    <string name="tv_back_exit_fullscreen">再次按返回键退出全屏</string>
+
+    <!-- TV 全屏遥控器操控（需求 N2） -->
+    <string name="tv_seek_forward">快进 %ds</string>
+    <string name="tv_seek_back">快退 %ds</string>
+    <string name="tv_no_prev_video">已经是第一个视频</string>
+    <string name="tv_no_next_video">已经是最后一个视频</string>
+
+    <!-- TV 浏览独立全屏（需求 N6） -->
+    <string name="tv_browse_back_label">浏览</string>
+    <string name="tv_browse_watch_loading">加载相关视频…</string>
+
+    <!-- 手机清晰度与默认画质（需求 N3） -->
+    <string name="quality_picker_title">选择清晰度</string>
+    <string name="settings_default_play_quality">默认播放画质</string>
+    <string name="settings_default_download_quality">默认下载画质</string>
+
+    <!-- 手机播放设置面板各分区 -->
+    <string name="settings_panel_title">播放设置</string>
+    <string name="settings_section_speed">倍速</string>
+    <string name="settings_section_quality">清晰度</string>
+    <string name="settings_section_danmaku">弹幕</string>
+    <string name="settings_danmaku_switch">弹幕开关</string>
+    <string name="settings_danmaku_scale">字号</string>
+    <string name="settings_danmaku_alpha">透明度</string>
+    <string name="settings_danmaku_density">密度</string>
+
+    <!-- 通用 -->
+    <string name="close">关闭</string>
+    <string name="confirm">确认</string>
+    <string name="cancel">取消</string>
+</resources>

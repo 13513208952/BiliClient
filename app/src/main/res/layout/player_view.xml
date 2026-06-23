@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    PlayerView 包装，通过 XML 属性注入自定义控制条。
+    controller_layout_id 只能在 XML 中指定（无对应 Java/Kotlin API）。
+-->
+<androidx.media3.ui.PlayerView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/player_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:use_controller="true"
+    app:controller_layout_id="@layout/exo_player_controls"
+    app:show_timeout="3000"
+    app:surface_type="surface_view" />
