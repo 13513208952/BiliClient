@@ -1,34 +1,45 @@
-# Built outputs
-build/
-app/build/
-
-# Embedded JDK (大型二进制，不入库)
-.jdk21/
-
-# Gradle
-.gradle/
-local.properties
-gradle.properties.local
-
-# IDE
-.idea/
-*.iml
-.DS_Store
-
-# Keystore files (never commit real keystores)
-*.jks
-*.keystore
-keystore.properties
-
-# Generated
-app/schemas/
-
-# Debug APKs
-*.apk
-
-# Build / dev logs
+# Miscellaneous
+*.class
 *.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
 
-# 设计文档与需求草稿（本地保留，不入库）
-/docs/
-/20260611update.txt
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release

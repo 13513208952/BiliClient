@@ -1,39 +1,31 @@
 # BiliClient
 
-一个第三方哔哩哔哩（Bilibili）安卓客户端，基于 Kotlin + Jetpack Compose 开发，同时适配**手机**与**Android TV**两种形态。
+本项目是bilibili的一个第三方客户端，并精简了上游部分功能，增加了下载功能（下载会默认下载到系统默认视频文件夹路径，顺便移除了缓存功能）。
+顺便一提，我们顺便加入了一个定制推送源-怀旧推荐。怀旧推荐会使用我们从internet archive 和common crawl采集得到的视频列表，并进行筛选、精简和定期剔除失效视频，并充分打乱了顺序。
+这意味着你可以用这个模式看看6年之前疫情之前的00后们看到的B站是什么样子的，这个模式没有推送算法。推送源详情请看https://github.com/13513208952/Bili20HistoryVideoAV 项目。
 
-> ⚠️ **仅供个人学习与技术研究使用，禁止任何商业用途，使用后果自负。** 本项目与哔哩哔哩官方无任何关联，暂不附带开源许可证（保留所有权利）。
+## 0.2.0 版本说明
 
-## 功能
+之前的版本是拿AI搓出来的，但是很烂，但是我们后来才发现这个更强大的开源项目，就借来源码用了。
+本次是基于上游piliplus仓库的对本项目的重构版本，也可以视作对原仓库的风味版本，后面还会加入更多的一些小功能。
 
-- **视频播放**：Media3 / ExoPlayer 播放 DASH 音视频流，弹幕渲染，倍速、清晰度切换。
-- **多类型视频**：常规视频、分 P、合集、番剧（PGC）。
-- **下载**：多线程分块下载、断点续传、镜像 failover、音视频合流。
-- **账号**：扫码 / 短信登录，点赞 / 投币 / 收藏 / 三连 / 评论 / 追番等互动。
-- **客户端门面**：首页推荐、搜索（含联想与历史）、收藏夹、历史记录、个人页。
-- **Android TV**：遥控器操控的首页 / 浏览 / 搜索 / 桌面 / 番剧全屏播放等。
+## 构建信息
 
-## 技术栈
+- Android 包名：`com.bilibilitakemeback`
+- 版本：`0.2.0`（versionCode 2）
+- Android：minSdk 29，targetSdk 36
+- Flutter：3.44.7
+- JDK：21
 
-Kotlin · Jetpack Compose · Hilt · Media3 ExoPlayer · Room · Retrofit / OkHttp · WorkManager · Wire(protobuf)
+```bash
+flutter pub get
+flutter build apk --release
+```
 
-## 构建
+`0.2.0` 的 release 构建暂时使用 Android debug keystore，后续版本再切换正式发布签名。
 
-- 需要 **JDK 21**。可通过环境变量 `JAVA_HOME`，或在用户级 `~/.gradle/gradle.properties` 中设置：
-  ```
-  org.gradle.java.home=/path/to/jdk-21
-  ```
-- 编译与打包：
-  ```
-  ./gradlew assembleDebug      # 调试包
-  ./gradlew assembleRelease    # 发布包（R8 混淆裁剪）
-  ```
-- `minSdk = 29`，`targetSdk / compileSdk = 36`，ABI：`arm64-v8a` + `x86_64`。
+## 上游与许可证
 
-## 签名说明
+BiliClient `0.2.0` 基于 [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) / 机主提供的 pili20 源码修改。上游源码中的版权声明和第三方许可证均予保留。
 
-为便于个人安装验证，release 构建**刻意沿用 Android 公共 debug keystore** 签名（密码为公开的 `android`），**不使用专用发布密钥**。这意味着本仓库**面向学习/个人使用，并非用于正式分发**；如需正式发布，请自行配置独立 keystore。
-
-## 参考
-
-下载与解析思路参考了开源项目 [Bili23-Downloader](https://github.com/ScottSloan/Bili23-Downloader)（MIT，开源、跨平台 B 站下载工具）。
+本项目依照 [GNU General Public License v3.0](LICENSE) 发布。
