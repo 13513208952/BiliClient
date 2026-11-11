@@ -28,6 +28,6 @@ flutter build apk --release
 
 ## 上游与许可证
 
-BiliClient `0.2.1` 基于 [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) / 机主提供的 pili20 源码修改。上游源码中的版权声明和第三方许可证均予保留。
+BiliClient `0.2.1` 基于 [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) 源码修改。上游源码中的版权声明和第三方许可证均予保留。
 
 本项目依照 [GNU General Public License v3.0](LICENSE) 发布。
