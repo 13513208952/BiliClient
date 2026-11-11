@@ -135,7 +135,7 @@ class _DownloadPanelState extends State<DownloadPanel> {
                 _audioQuality = value;
                 (context as Element).markNeedsBuild();
               },
-              itemBuilder: (context) => AudioQuality.values
+              itemBuilder: (context) => AudioQuality.selectableValues
                   .map((e) => PopupMenuItem(value: e, child: Text(e.desc)))
                   .toList(),
               child: _popupMenuChild(theme, _audioQuality.desc),

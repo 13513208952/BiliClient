@@ -24,7 +24,8 @@ enum HomeTabType implements EnumWithLabel {
     HomeTabType.rcmd => const RcmdPage(key: ValueKey('homeTab-rcmd')),
     HomeTabType.nostalgia => RcmdPage(
       key: const ValueKey('homeTab-nostalgia'),
-      controllerBuilder: () => Get.putOrFind(NostalgiaController.new),
+      controllerBuilder: () =>
+          Get.putOrFind<NostalgiaController>(NostalgiaController.new),
     ),
   };
 }

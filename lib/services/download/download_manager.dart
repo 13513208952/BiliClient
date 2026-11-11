@@ -43,35 +43,39 @@ class DownloadManager {
 
   Future<int?> _probeLength() async {
     Object? lastError;
-    for (final candidate in urls) {
-      final token = CancelToken();
-      _cancelTokens.add(token);
-      try {
-        final response = await Request.http11Dio.get<ResponseBody>(
-          candidate.http2https,
-          options: Options(
-            headers: const {'range': 'bytes=0-0'},
-            responseType: ResponseType.stream,
-            validateStatus: (status) => status == 200 || status == 206,
-          ),
-          cancelToken: token,
-        );
-        if (response.statusCode == 206) {
-          final value = response.headers.value('content-range');
-          final total = value == null
-              ? null
-              : int.tryParse(value.substring(value.lastIndexOf('/') + 1));
-          await response.data!.stream.drain<void>();
-          if (total != null && total > 0) return total;
-        } else {
-          token.cancel('range unsupported');
-          return null;
+    for (var round = 0; round < 3; round++) {
+      for (final candidate in urls) {
+        final token = CancelToken();
+        _cancelTokens.add(token);
+        try {
+          final response = await Request.http11Dio.get<ResponseBody>(
+            candidate.http2https,
+            options: Options(
+              headers: const {'range': 'bytes=0-0'},
+              responseType: ResponseType.stream,
+              validateStatus: (status) => status == 200 || status == 206,
+              connectTimeout: const Duration(seconds: 30),
+              receiveTimeout: const Duration(seconds: 60),
+            ),
+            cancelToken: token,
+          );
+          if (response.statusCode == 206) {
+            final value = response.headers.value('content-range');
+            final total = value == null
+                ? null
+                : int.tryParse(value.substring(value.lastIndexOf('/') + 1));
+            await response.data!.stream.drain<void>();
+            if (total != null && total > 0) return total;
+          } else {
+            token.cancel('range unsupported');
+            return null;
+          }
+        } catch (e) {
+          if (_cancelled) return null;
+          lastError = e;
+        } finally {
+          _cancelTokens.remove(token);
         }
-      } catch (e) {
-        if (_cancelled) return null;
-        lastError = e;
-      } finally {
-        _cancelTokens.remove(token);
       }
     }
     throw lastError ?? const HttpException('无法读取媒体文件长度');
@@ -82,66 +86,70 @@ class DownloadManager {
     await file.parent.create(recursive: true);
     Object? lastError;
 
-    for (final candidate in urls) {
-      if (_cancelled) return;
-      var received = await file.exists() ? await file.length() : 0;
-      final token = CancelToken();
-      _cancelTokens.add(token);
-      IOSink? sink;
-      try {
-        final response = await Request.http11Dio.get<ResponseBody>(
-          candidate.http2https,
-          options: Options(
-            headers: received > 0 ? {'range': 'bytes=$received-'} : null,
-            responseType: ResponseType.stream,
-            validateStatus: (status) =>
-                status == 200 || status == 206 || status == 416,
-          ),
-          cancelToken: token,
-        );
-        if (response.statusCode == 416 &&
-            knownTotal != null &&
-            received == knownTotal) {
-          _emitProgress(received, knownTotal, force: true);
-          return;
-        }
-        if (response.statusCode == 416) {
-          await _delete(file);
-          received = 0;
-          continue;
-        }
-        if (received > 0 && response.statusCode == 200) {
-          await _delete(file);
-          received = 0;
-        }
-        sink = file.openWrite(
-          mode: received == 0 ? FileMode.writeOnly : FileMode.writeOnlyAppend,
-        );
-        final data = response.data!;
-        final total = knownTotal ?? data.contentLength + received;
-        _emitProgress(received, total, force: true);
-        await for (final chunk in data.stream) {
-          if (_cancelled) return;
-          sink.add(chunk);
-          received += chunk.length;
-          _emitProgress(received, total);
-        }
-        await sink.flush();
-        await sink.close();
-        sink = null;
-        if (knownTotal != null && received != knownTotal) {
-          throw HttpException('文件长度不完整：$received/$knownTotal');
-        }
-        _emitProgress(received, total, force: true);
-        return;
-      } catch (e) {
+    for (var round = 0; round < 3; round++) {
+      for (final candidate in urls) {
         if (_cancelled) return;
-        lastError = e;
-      } finally {
+        var received = await file.exists() ? await file.length() : 0;
+        final token = CancelToken();
+        _cancelTokens.add(token);
+        IOSink? sink;
         try {
-          await sink?.close();
-        } catch (_) {}
-        _cancelTokens.remove(token);
+          final response = await Request.http11Dio.get<ResponseBody>(
+            candidate.http2https,
+            options: Options(
+              headers: received > 0 ? {'range': 'bytes=$received-'} : null,
+              responseType: ResponseType.stream,
+              validateStatus: (status) =>
+                  status == 200 || status == 206 || status == 416,
+              connectTimeout: const Duration(seconds: 30),
+              receiveTimeout: const Duration(seconds: 60),
+            ),
+            cancelToken: token,
+          );
+          if (response.statusCode == 416 &&
+              knownTotal != null &&
+              received == knownTotal) {
+            _emitProgress(received, knownTotal, force: true);
+            return;
+          }
+          if (response.statusCode == 416) {
+            await _delete(file);
+            received = 0;
+            continue;
+          }
+          if (received > 0 && response.statusCode == 200) {
+            await _delete(file);
+            received = 0;
+          }
+          sink = file.openWrite(
+            mode: received == 0 ? FileMode.writeOnly : FileMode.writeOnlyAppend,
+          );
+          final data = response.data!;
+          final total = knownTotal ?? data.contentLength + received;
+          _emitProgress(received, total, force: true);
+          await for (final chunk in data.stream) {
+            if (_cancelled) return;
+            sink.add(chunk);
+            received += chunk.length;
+            _emitProgress(received, total);
+          }
+          await sink.flush();
+          await sink.close();
+          sink = null;
+          if (knownTotal != null && received != knownTotal) {
+            throw HttpException('文件长度不完整：$received/$knownTotal');
+          }
+          _emitProgress(received, total, force: true);
+          return;
+        } catch (e) {
+          if (_cancelled) return;
+          lastError = e;
+        } finally {
+          try {
+            await sink?.close();
+          } catch (_) {}
+          _cancelTokens.remove(token);
+        }
       }
     }
     throw lastError ?? const HttpException('媒体下载失败');
@@ -220,52 +228,56 @@ class DownloadManager {
     if (receivedByPart[index] == expected) return;
 
     Object? lastError;
-    for (final candidate in urls) {
-      if (_cancelled) return;
-      var received = await file.exists() ? await file.length() : 0;
-      if (received == expected) return;
-      final token = CancelToken();
-      _cancelTokens.add(token);
-      IOSink? sink;
-      try {
-        final response = await Request.http11Dio.get<ResponseBody>(
-          candidate.http2https,
-          options: Options(
-            headers: {'range': 'bytes=${rangeStart + received}-$rangeEnd'},
-            responseType: ResponseType.stream,
-            validateStatus: (status) => status == 206 || status == 416,
-          ),
-          cancelToken: token,
-        );
-        if (response.statusCode == 416 && received == expected) return;
-        if (response.statusCode != 206) {
-          throw const HttpException('服务器不支持分段下载');
-        }
-        sink = file.openWrite(
-          mode: received == 0 ? FileMode.writeOnly : FileMode.writeOnlyAppend,
-        );
-        await for (final chunk in response.data!.stream) {
-          if (_cancelled) return;
-          sink.add(chunk);
-          received += chunk.length;
-          receivedByPart[index] = received;
-          _emitProgress(receivedByPart.fold(0, (a, b) => a + b), total);
-        }
-        await sink.flush();
-        await sink.close();
-        sink = null;
-        if (received != expected) {
-          throw HttpException('分段 $index 长度不完整：$received/$expected');
-        }
-        return;
-      } catch (e) {
+    for (var round = 0; round < 3; round++) {
+      for (final candidate in urls) {
         if (_cancelled) return;
-        lastError = e;
-      } finally {
+        var received = await file.exists() ? await file.length() : 0;
+        if (received == expected) return;
+        final token = CancelToken();
+        _cancelTokens.add(token);
+        IOSink? sink;
         try {
-          await sink?.close();
-        } catch (_) {}
-        _cancelTokens.remove(token);
+          final response = await Request.http11Dio.get<ResponseBody>(
+            candidate.http2https,
+            options: Options(
+              headers: {'range': 'bytes=${rangeStart + received}-$rangeEnd'},
+              responseType: ResponseType.stream,
+              validateStatus: (status) => status == 206 || status == 416,
+              connectTimeout: const Duration(seconds: 30),
+              receiveTimeout: const Duration(seconds: 60),
+            ),
+            cancelToken: token,
+          );
+          if (response.statusCode == 416 && received == expected) return;
+          if (response.statusCode != 206) {
+            throw const HttpException('服务器不支持分段下载');
+          }
+          sink = file.openWrite(
+            mode: received == 0 ? FileMode.writeOnly : FileMode.writeOnlyAppend,
+          );
+          await for (final chunk in response.data!.stream) {
+            if (_cancelled) return;
+            sink.add(chunk);
+            received += chunk.length;
+            receivedByPart[index] = received;
+            _emitProgress(receivedByPart.fold(0, (a, b) => a + b), total);
+          }
+          await sink.flush();
+          await sink.close();
+          sink = null;
+          if (received != expected) {
+            throw HttpException('分段 $index 长度不完整：$received/$expected');
+          }
+          return;
+        } catch (e) {
+          if (_cancelled) return;
+          lastError = e;
+        } finally {
+          try {
+            await sink?.close();
+          } catch (_) {}
+          _cancelTokens.remove(token);
+        }
       }
     }
     throw lastError ?? HttpException('分段 $index 下载失败');

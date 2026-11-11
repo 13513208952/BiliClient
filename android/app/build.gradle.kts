@@ -35,7 +35,6 @@ android {
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.0")
-    implementation("com.antonkarpenko:ffmpeg-kit-full:2.1.0")
 }
 
 kotlin {
@@ -46,4 +45,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+tasks.matching { it.name == "collectReleaseDependencies" }.configureEach {
+    dependsOn(":media_kit_libs_android_video:downloadDependencies")
 }

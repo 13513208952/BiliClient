@@ -14,6 +14,7 @@ enum AudioQuality {
 
   const AudioQuality(this.code, this.desc);
 
+  static const selectableValues = [hiRes, dolby_30250, k192, k132, k64];
   static final _codeMap = {for (final i in values) i.code: i};
 
   static AudioQuality fromCode(int code) => _codeMap[code]!;

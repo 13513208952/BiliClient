@@ -210,7 +210,7 @@ class _GeetestWebviewDialogState extends State<GeetestWebviewDialog> {
             clearCache: true,
             javaScriptEnabled: true,
             forceDark: ForceDark.AUTO,
-            useHybridComposition: false,
+            useHybridComposition: true,
             algorithmicDarkeningAllowed: true,
             useShouldOverrideUrlLoading: true,
             userAgent: BrowserUa.mob,
