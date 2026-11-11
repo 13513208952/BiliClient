@@ -4,16 +4,14 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.pm.PackageManager;
-import android.media.MediaCodec;
-import android.media.MediaExtractor;
-import android.media.MediaFormat;
-import android.media.MediaMuxer;
+import com.antonkarpenko.ffmpegkit.FFmpegKit;
+import com.antonkarpenko.ffmpegkit.FFmpegSession;
+import com.antonkarpenko.ffmpegkit.ReturnCode;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowManager;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -166,86 +164,26 @@ public class MainActivity extends AudioServiceActivity {
             throw new IOException("无法覆盖旧的合流文件");
         }
 
-        MediaExtractor videoExtractor = new MediaExtractor();
-        MediaExtractor audioExtractor = new MediaExtractor();
-        MediaMuxer muxer = null;
-        boolean muxerStarted = false;
-        try {
-            videoExtractor.setDataSource(videoPath);
-            audioExtractor.setDataSource(audioPath);
-            int videoTrack = findTrack(videoExtractor, "video/");
-            int audioTrack = findTrack(audioExtractor, "audio/");
-            if (videoTrack < 0 || audioTrack < 0) {
-                throw new IOException("下载文件缺少音频或视频轨道");
-            }
-
-            MediaFormat videoFormat = videoExtractor.getTrackFormat(videoTrack);
-            MediaFormat audioFormat = audioExtractor.getTrackFormat(audioTrack);
-            muxer = new MediaMuxer(
-                    outputPath,
-                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-            int outputVideoTrack = muxer.addTrack(videoFormat);
-            int outputAudioTrack = muxer.addTrack(audioFormat);
-            muxer.start();
-            muxerStarted = true;
-
-            int bufferSize = Math.max(
-                    maxInputSize(videoFormat),
-                    maxInputSize(audioFormat));
-            ByteBuffer buffer = ByteBuffer.allocateDirect(bufferSize);
-            writeTrack(videoExtractor, videoTrack, muxer, outputVideoTrack, buffer);
-            writeTrack(audioExtractor, audioTrack, muxer, outputAudioTrack, buffer);
-        } finally {
-            videoExtractor.release();
-            audioExtractor.release();
-            if (muxer != null) {
-                try {
-                    if (muxerStarted) muxer.stop();
-                } finally {
-                    muxer.release();
-                }
-            }
+        FFmpegSession session = FFmpegKit.executeWithArguments(new String[]{
+                "-y",
+                "-i", videoPath,
+                "-i", audioPath,
+                "-map", "0:v:0",
+                "-map", "1:a:0",
+                "-c", "copy",
+                outputPath,
+        });
+        if (!ReturnCode.isSuccess(session.getReturnCode())) {
+            String logs = session.getAllLogsAsString();
+            if (logs == null) logs = "";
+            if (logs.length() > 4000) logs = logs.substring(logs.length() - 4000);
+            throw new IOException(
+                    "FFmpeg 合流失败(" + session.getReturnCode() + "): " + logs);
+        }
+        if (!output.isFile() || output.length() == 0) {
+            throw new IOException("FFmpeg 未生成有效的合流文件");
         }
         runOnUiThread(() -> result.success(null));
-    }
-
-    private static int findTrack(MediaExtractor extractor, String mimePrefix) {
-        for (int index = 0; index < extractor.getTrackCount(); index++) {
-            String mime = extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME);
-            if (mime != null && mime.startsWith(mimePrefix)) return index;
-        }
-        return -1;
-    }
-
-    private static int maxInputSize(MediaFormat format) {
-        return Math.max(
-                1024 * 1024,
-                format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)
-                        ? format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
-                        : 0);
-    }
-
-    private static void writeTrack(
-            MediaExtractor extractor,
-            int inputTrack,
-            MediaMuxer muxer,
-            int outputTrack,
-            ByteBuffer buffer) {
-        extractor.selectTrack(inputTrack);
-        MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-        while (true) {
-            buffer.clear();
-            int size = extractor.readSampleData(buffer, 0);
-            if (size < 0) break;
-            info.offset = 0;
-            info.size = size;
-            info.presentationTimeUs = Math.max(0, extractor.getSampleTime());
-            info.flags = (extractor.getSampleFlags() & MediaExtractor.SAMPLE_FLAG_SYNC) != 0
-                    ? MediaCodec.BUFFER_FLAG_KEY_FRAME
-                    : 0;
-            muxer.writeSampleData(outputTrack, buffer, info);
-            extractor.advance();
-        }
     }
 
 }

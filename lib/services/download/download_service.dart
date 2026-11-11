@@ -10,6 +10,7 @@ import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 import 'package:saver_gallery/saver_gallery.dart';
@@ -218,6 +219,8 @@ class DownloadService extends GetxService {
         task
           ..status = DownloadTaskStatus.failed
           ..error = e.toString()
+          ..redownloadOnRetry =
+              e is PlatformException && e.code == 'mux_failed'
           ..updatedAt = DateTime.now().millisecondsSinceEpoch;
         tasks.refresh();
       }
@@ -278,6 +281,7 @@ class DownloadService extends GetxService {
     task
       ..status = DownloadTaskStatus.done
       ..error = null
+      ..redownloadOnRetry = false
       ..downloadedBytes = task.totalBytes
       ..updatedAt = DateTime.now().millisecondsSinceEpoch;
     tasks.refresh();
@@ -313,6 +317,13 @@ class DownloadService extends GetxService {
     if (task.status == DownloadTaskStatus.done ||
         task.status == DownloadTaskStatus.saving) {
       return;
+    }
+    if (task.redownloadOnRetry) {
+      await _deleteWorkFiles(task);
+      task
+        ..downloadedBytes = 0
+        ..totalBytes = 0
+        ..redownloadOnRetry = false;
     }
     task
       ..status = DownloadTaskStatus.waiting

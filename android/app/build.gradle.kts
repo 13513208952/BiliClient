@@ -26,6 +26,10 @@ android {
         release {
             // 0.2.0 暂用 Android debug keystore；后续正式版再切换独立发布密钥。
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             isMinifyEnabled = true
             isShrinkResources = true
         }
@@ -35,6 +39,7 @@ android {
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.0")
+    implementation("com.antonkarpenko:ffmpeg-kit-full:2.1.0")
 }
 
 kotlin {

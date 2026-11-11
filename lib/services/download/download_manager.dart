@@ -26,6 +26,10 @@ class DownloadManager {
   final List<CancelToken> _cancelTokens = [];
   bool _cancelled = false;
   int _lastProgressAt = 0;
+  static final RegExp _contentRangePattern = RegExp(
+    r'^bytes\s+(\d+)-(\d+)/(\d+)$',
+    caseSensitive: false,
+  );
 
   Future<void> _run() async {
     if (urls.isEmpty) {
@@ -61,11 +65,27 @@ class DownloadManager {
           );
           if (response.statusCode == 206) {
             final value = response.headers.value('content-range');
-            final total = value == null
+            final match = value == null
                 ? null
-                : int.tryParse(value.substring(value.lastIndexOf('/') + 1));
+                : _contentRangePattern.firstMatch(value.trim());
+            final total = match == null
+                ? null
+                : int.tryParse(match.group(3)!);
             await response.data!.stream.drain<void>();
-            if (total != null && total > 0) return total;
+            final returnedEnd = match == null
+                ? null
+                : int.tryParse(match.group(2)!);
+            if (match != null &&
+                match.group(1) == '0' &&
+                returnedEnd != null &&
+                returnedEnd >= 0 &&
+                total != null &&
+                total > 0) {
+              return total;
+            }
+            lastError = HttpException(
+              '服务器返回的媒体长度范围不匹配: $value',
+            );
           } else {
             token.cancel('range unsupported');
             return null;
@@ -252,10 +272,44 @@ class DownloadManager {
           if (response.statusCode != 206) {
             throw const HttpException('服务器不支持分段下载');
           }
+
+          final data = response.data!;
+          final requestedStart = rangeStart + received;
+          final contentRange = response.headers.value('content-range');
+          final match = contentRange == null
+              ? null
+              : _contentRangePattern.firstMatch(contentRange.trim());
+          final returnedStart = match == null
+              ? null
+              : int.tryParse(match.group(1)!);
+          final returnedEnd = match == null
+              ? null
+              : int.tryParse(match.group(2)!);
+          final returnedTotal = match == null
+              ? null
+              : int.tryParse(match.group(3)!);
+          if (returnedStart != requestedStart ||
+              returnedEnd == null ||
+              returnedEnd < requestedStart ||
+              returnedEnd > rangeEnd ||
+              returnedTotal != total) {
+            await data.stream.drain<void>();
+            throw HttpException(
+              '服务器返回的分段范围不匹配: $contentRange',
+            );
+          }
+          final remaining = returnedEnd - requestedStart + 1;
+          if (data.contentLength >= 0 && data.contentLength != remaining) {
+            await data.stream.drain<void>();
+            throw HttpException(
+              '服务器返回的分段长度不匹配: ${data.contentLength}/$remaining',
+            );
+          }
+
           sink = file.openWrite(
             mode: received == 0 ? FileMode.writeOnly : FileMode.writeOnlyAppend,
           );
-          await for (final chunk in response.data!.stream) {
+          await for (final chunk in data.stream) {
             if (_cancelled) return;
             sink.add(chunk);
             received += chunk.length;

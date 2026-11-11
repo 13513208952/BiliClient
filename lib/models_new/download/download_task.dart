@@ -35,6 +35,7 @@ class DownloadTask {
     this.audioPath,
     this.outputPath,
     this.savedUri,
+    this.redownloadOnRetry = false,
     int? updatedAt,
   }) : updatedAt = updatedAt ?? DateTime.now().millisecondsSinceEpoch;
 
@@ -55,6 +56,7 @@ class DownloadTask {
   int downloadedBytes;
   DownloadTaskStatus status;
   String? error;
+  bool redownloadOnRetry;
   String? videoPath;
   String? audioPath;
   String? outputPath;
@@ -84,6 +86,9 @@ class DownloadTask {
         orElse: () => DownloadTaskStatus.failed,
       ),
       error = json['error'] as String?,
+      redownloadOnRetry =
+          json['redownloadOnRetry'] as bool? ??
+          ((json['error'] as String?)?.contains('mux_failed') ?? false),
       videoPath = (json['videoPath'] ?? json['filePath']) as String?,
       audioPath = json['audioPath'] as String?,
       outputPath = json['outputPath'] as String?,
@@ -108,6 +113,7 @@ class DownloadTask {
     'downloadedBytes': downloadedBytes,
     'status': status.name,
     'error': error,
+    'redownloadOnRetry': redownloadOnRetry,
     'videoPath': videoPath,
     'audioPath': audioPath,
     'outputPath': outputPath,
