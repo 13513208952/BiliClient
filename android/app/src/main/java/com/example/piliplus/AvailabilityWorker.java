@@ -34,26 +34,27 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
 
 @Keep // WorkManager persists the worker's class name and constructs it by reflection.
 public final class AvailabilityWorker extends Worker {
     private static final String WORK_NAME = "availability-support";
     private static final String VIEW_API = "https://api.bilibili.com/x/web-interface/view?aid=";
-    private static final long RUN_MS = TimeUnit.MINUTES.toMillis(7);
-    private static final long BETWEEN_REQUESTS_MS = 3_000;
+    // A regular WorkManager job is subject to a shorter system window.
+    private static final long BACKGROUND_MS = TimeUnit.MINUTES.toMillis(7);
+    private static final long FOREGROUND_MS = TimeUnit.MINUTES.toMillis(15);
+    private static final long IDLE_RETRY_MS = 20_000;
     private static final long REQUEST_MS = 30_000;
     private static final int MAX_API_BYTES = 1_048_576;
     private static final long INVALID_INTEGER = Long.MIN_VALUE;
-    // Cancellation and immediate re-enabling must not overlap requests or checkpoints.
-    private static final ReentrantLock RUN_LOCK = new ReentrantLock();
+    private static final AvailabilityLanes LANES =
+            new AvailabilityLanes(SystemClock::elapsedRealtime, FOREGROUND_MS);
 
     static void setEnabled(Context context, AvailabilityStore store, boolean enabled)
             throws IOException, ExecutionException, InterruptedException {
         WorkManager manager = WorkManager.getInstance(context);
         if (!enabled) {
             store.setEnabled(false);
+            LANES.enabledChanged(false);
             manager.cancelUniqueWork(WORK_NAME).getResult().get();
             return;
         }
@@ -77,9 +78,38 @@ public final class AvailabilityWorker extends Worker {
                     .getResult().get();
             store.setEnabled(true);
         }
+        LANES.enabledChanged(true);
     }
 
-    private final AtomicReference<HttpURLConnection> runningRequest = new AtomicReference<>();
+    private volatile AvailabilityLanes.Lease background;
+
+    static void onWake(Context context, Object owner) {
+        LANES.wake(owner, () -> AvailabilityStore.get(context).isEnabled(),
+                lease -> runForeground(context, lease));
+    }
+
+    static void onHidden(Object owner) {
+        LANES.hide(owner);
+    }
+
+    static void setHangMode(boolean active) {
+        LANES.setHangMode(active);
+    }
+
+    private static void runForeground(Context context, AvailabilityLanes.Lease lease) {
+        AvailabilityStore store = AvailabilityStore.get(context);
+        while (lease.live() && store.isEnabled()) {
+            run(context, lease);
+            if (!lease.live()) return;
+            // Idle, network loss, or cooldown; never wait after success.
+            try {
+                Thread.sleep(IDLE_RETRY_MS);
+            } catch (InterruptedException stopped) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
 
     public AvailabilityWorker(@NonNull Context context, @NonNull WorkerParameters parameters) {
         super(context, parameters);
@@ -88,66 +118,66 @@ public final class AvailabilityWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
-        if (!RUN_LOCK.tryLock()) {
-            return Result.retry();
-        }
+        if (isHangMode()) return Result.success();
+        if (!LANES.tryReserve()) return Result.retry();
+        AvailabilityLanes.Lease lease =
+                new AvailabilityLanes.Lease(SystemClock::elapsedRealtime, BACKGROUND_MS);
+        background = lease;
         try {
-            return runBatch();
-        } catch (IOException | SQLiteException failure) {
-            Log.w("AvailabilityWorker", "Could not save availability progress", failure);
-            return Result.retry();
+            if (isStopped()) return Result.success();
+            return run(getApplicationContext(), lease);
         } finally {
-            RUN_LOCK.unlock();
+            background = null;
+            LANES.release();
         }
     }
 
-    private Result runBatch() throws IOException {
-        Context context = getApplicationContext();
+    private static Result run(Context context, AvailabilityLanes.Lease lease) {
+        try {
+            return runBatch(context, lease);
+        } catch (IOException | SQLiteException failure) {
+            Log.w("AvailabilityWorker", "Could not save availability progress", failure);
+            return Result.retry();
+        }
+    }
+
+    private static Result runBatch(Context context, AvailabilityLanes.Lease lease)
+            throws IOException {
         AvailabilityStore store = AvailabilityStore.get(context);
         synchronized (store) {
-            if (!store.isEnabled()) {
-                return Result.success();
-            }
-        }
-        if (store.isCoolingDown()) {
-            return Result.success();
+            if (!store.isEnabled()) return Result.success();
         }
         ConnectivityManager networks = context.getSystemService(ConnectivityManager.class);
-        long stopAt = SystemClock.elapsedRealtime() + RUN_MS;
-        while (!isStopped() && store.isEnabled() && SystemClock.elapsedRealtime() < stopAt) {
-            long aid = store.nextCandidate();
-            if (aid == 0) {
-                return Result.success();
-            }
+        while (lease.live() && store.isEnabled() && !store.isCoolingDown(isHangMode())) {
             Network wifi = activeWifi(networks);
-            if (wifi == null) {
-                return Result.retry();
-            }
+            if (wifi == null) return Result.retry();
+            long aid = store.claimCandidate();
+            if (aid == 0) return Result.success();
             try {
-                Observation observation = fetch(networks, wifi, store, aid);
-                if (observation == null) {
+                Observation observation = fetch(networks, wifi, store, aid, lease);
+                if (observation == null || !lease.live() || !store.isEnabled()
+                        || !wifi.equals(activeWifi(networks))) {
                     return Result.retry();
                 }
                 store.checkpoint(aid, observation.state, observation.code, observation.message);
                 store.clearRisk();
             } catch (RiskControl risk) {
-                store.recordRisk(risk.retryAfterMs);
+                store.recordRisk(risk.retryAfterMs, isHangMode());
                 return Result.success();
             } catch (IOException | IllegalStateException transientFailure) {
-                if (!isStopped() && store.isEnabled() && wifi.equals(activeWifi(networks))) {
-                    // Do not let one malformed or temporarily failing submission block the queue.
+                if (lease.live() && store.isEnabled() && wifi.equals(activeWifi(networks))) {
                     store.deferCandidate(aid);
                 }
                 return Result.retry();
-            }
-            try {
-                Thread.sleep(BETWEEN_REQUESTS_MS);
-            } catch (InterruptedException stopped) {
-                Thread.currentThread().interrupt();
-                return Result.retry();
+            } finally {
+                store.releaseCandidate(aid);
             }
         }
         return Result.success();
+    }
+
+    static boolean isHangMode() {
+        return LANES.isHangMode();
     }
 
     private static Network activeWifi(ConnectivityManager networks) {
@@ -163,11 +193,14 @@ public final class AvailabilityWorker extends Worker {
                 && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) ? active : null;
     }
 
-    private Observation fetch(ConnectivityManager networks, Network wifi, AvailabilityStore store,
-            long aid) throws IOException {
+    private static Observation fetch(ConnectivityManager networks, Network wifi,
+            AvailabilityStore store, long aid, AvailabilityLanes.Lease lease) throws IOException {
         // Bind DNS and sockets to this Wi-Fi Network, with no fallback to the default route.
         HttpURLConnection http = (HttpURLConnection) wifi.openConnection(new URL(VIEW_API + aid));
-        runningRequest.set(http);
+        if (!lease.attach(http)) {
+            http.disconnect();
+            return null;
+        }
         try {
             http.setConnectTimeout(10_000);
             http.setReadTimeout(10_000);
@@ -176,7 +209,8 @@ public final class AvailabilityWorker extends Worker {
             http.setRequestProperty("Accept", "application/json");
             http.setRequestProperty("Referer", "https://www.bilibili.com/");
             http.setRequestProperty("User-Agent", "BiliClient/availability");
-            if (isStopped() || !store.isEnabled() || !wifi.equals(activeWifi(networks))) {
+            if (!lease.live() || !store.isEnabled() || store.isCoolingDown(isHangMode())
+                    || !wifi.equals(activeWifi(networks))) {
                 return null;
             }
             long deadline = SystemClock.elapsedRealtime() + REQUEST_MS;
@@ -193,17 +227,14 @@ public final class AvailabilityWorker extends Worker {
                 return parseObservation(json, aid, http.getHeaderField("Retry-After"));
             }
         } finally {
-            runningRequest.compareAndSet(http, null);
-            http.disconnect();
+            if (lease.detach(http)) http.disconnect();
         }
     }
 
     @Override
     public void onStopped() {
-        HttpURLConnection connection = runningRequest.getAndSet(null);
-        if (connection != null) {
-            connection.disconnect();
-        }
+        AvailabilityLanes.Lease lease = background;
+        if (lease != null) lease.cancel();
     }
 
     private static Observation parseObservation(JsonReader json, long aid, String retryAfterHeader)

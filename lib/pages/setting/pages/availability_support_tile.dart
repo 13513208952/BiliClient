@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:PiliPlus/pages/setting/pages/availability_hang_page.dart';
 import 'package:PiliPlus/services/availability_support_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -85,6 +86,20 @@ class _AndroidAvailabilitySupportTileState
     }
   }
 
+  Future<void> _openHangPage() => _perform(() async {
+    await AvailabilitySupportService.setHangMode(true);
+    try {
+      if (mounted) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(builder: (_) => const AvailabilityHangPage()),
+        );
+      }
+    } finally {
+      await AvailabilitySupportService.setHangMode(false);
+    }
+    return null;
+  }, '无法开启挂机验证');
+
   @override
   Widget build(BuildContext context) {
     final status = _status;
@@ -118,6 +133,17 @@ class _AndroidAvailabilitySupportTileState
             if (expanded) _refresh();
           },
           children: [
+            ListTile(
+              leading: const Icon(Icons.nights_stay_outlined),
+              title: const Text('进入挂机验证'),
+              subtitle: Text(
+                status?.enabled == true
+                    ? 'Wi-Fi 下四路验证，黑屏常亮；用系统返回键退出'
+                    : '请先开启协助验证视频可用性',
+              ),
+              enabled: !_busy && status?.enabled == true,
+              onTap: _busy || status?.enabled != true ? null : _openHangPage,
+            ),
             ListTile(
               enabled: !_busy,
               leading: const Icon(Icons.playlist_add_outlined),

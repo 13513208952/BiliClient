@@ -30,6 +30,7 @@ final class AvailabilityStore extends SQLiteOpenHelper {
     private static final Pattern AV_LINE = Pattern.compile("av([1-9][0-9]*)");
     private static final String ENABLED = "enabled";
     private static final String RISK_UNTIL = "risk_until_ms";
+    private static final String HANG_RISK_UNTIL = "hang_risk_until_ms";
     private static final String RISK_FAILURES = "risk_failures";
     private static AvailabilityStore instance;
 
@@ -42,6 +43,8 @@ final class AvailabilityStore extends SQLiteOpenHelper {
 
     private final ContentResolver resolver;
     private final SharedPreferences prefs;
+    // A claim remains pending on disk until checkpointed; it survives process death.
+    private final long[] claimed = new long[AvailabilityLanes.LIMIT];
 
     private AvailabilityStore(Context context) {
         super(context, "availability-support.sqlite", null, 1);
@@ -74,22 +77,34 @@ final class AvailabilityStore extends SQLiteOpenHelper {
         }
     }
 
-    boolean isCoolingDown() {
-        return prefs.getLong(RISK_UNTIL, 0) > System.currentTimeMillis();
+    boolean isCoolingDown(boolean hanging) {
+        long ordinaryUntil = prefs.getLong(RISK_UNTIL, 0);
+        long until = hanging ? prefs.getLong(HANG_RISK_UNTIL, ordinaryUntil) : ordinaryUntil;
+        return until > System.currentTimeMillis();
     }
 
-    void recordRisk(long retryAfterMs) throws IOException {
-        int failures = Math.min(5, prefs.getInt(RISK_FAILURES, 0) + 1);
-        long delay = TimeUnit.MINUTES.toMillis(Math.min(120, 10 << (failures - 1)));
-        long until = Math.max(System.currentTimeMillis() + delay, retryAfterMs);
-        if (!prefs.edit().putInt(RISK_FAILURES, failures).putLong(RISK_UNTIL, until).commit()) {
+    synchronized void recordRisk(long retryAfterMs, boolean hanging) throws IOException {
+        long now = System.currentTimeMillis();
+        long hangUntil = prefs.getLong(HANG_RISK_UNTIL, 0);
+        long ordinaryUntil = prefs.getLong(RISK_UNTIL, 0);
+        int failures = prefs.getInt(RISK_FAILURES, 0);
+        // Concurrent responses under one cooldown are one episode.
+        if ((hanging ? hangUntil : ordinaryUntil) <= now) {
+            failures = Math.min(5, failures + 1);
+            long delay = TimeUnit.MINUTES.toMillis(Math.min(120, 10 << (failures - 1)));
+            ordinaryUntil = Math.max(ordinaryUntil, now + delay);
+            hangUntil = now + TimeUnit.MINUTES.toMillis(5);
+        }
+        if (!prefs.edit().putInt(RISK_FAILURES, failures)
+                .putLong(RISK_UNTIL, Math.max(ordinaryUntil, retryAfterMs))
+                .putLong(HANG_RISK_UNTIL, Math.max(hangUntil, retryAfterMs)).commit()) {
             throw new IOException("Could not persist availability cooldown");
         }
     }
 
-    void clearRisk() {
-        if (prefs.contains(RISK_UNTIL)) {
-            prefs.edit().remove(RISK_UNTIL).remove(RISK_FAILURES).apply();
+    synchronized void clearRisk() {
+        if (prefs.contains(RISK_UNTIL) && !isCoolingDown(false)) {
+            prefs.edit().remove(RISK_UNTIL).remove(HANG_RISK_UNTIL).remove(RISK_FAILURES).apply();
         }
     }
 
@@ -101,7 +116,7 @@ final class AvailabilityStore extends SQLiteOpenHelper {
             status.put("enabled", isEnabled());
             status.put("pending", counts.getLong(0));
             status.put("results", counts.getLong(1));
-            status.put("coolingDown", isCoolingDown());
+            status.put("coolingDown", isCoolingDown(AvailabilityWorker.isHangMode()));
             return status;
         }
     }
@@ -153,12 +168,29 @@ final class AvailabilityStore extends SQLiteOpenHelper {
         return new IOException("第 " + number + " 行不是有效的 AV 号（例如 av123）");
     }
 
-    long nextCandidate() {
+    synchronized long claimCandidate() {
         try (SQLiteStatement next = getReadableDatabase().compileStatement(
                 "SELECT coalesce((SELECT aid FROM pending WHERE retry_at_ms <= ? "
-                        + "ORDER BY retry_at_ms, aid LIMIT 1), 0)")) {
+                        + "AND aid NOT IN (?,?,?,?) ORDER BY retry_at_ms, aid LIMIT 1), 0)")) {
             next.bindLong(1, System.currentTimeMillis());
-            return next.simpleQueryForLong();
+            int slot = -1;
+            for (int i = 0; i < claimed.length; i++) {
+                next.bindLong(i + 2, claimed[i]);
+                if (claimed[i] == 0) slot = i;
+            }
+            if (slot < 0) throw new IllegalStateException("No verification claim slot");
+            long aid = next.simpleQueryForLong();
+            claimed[slot] = aid;
+            return aid;
+        }
+    }
+
+    synchronized void releaseCandidate(long aid) {
+        for (int slot = 0; slot < claimed.length; slot++) {
+            if (claimed[slot] == aid) {
+                claimed[slot] = 0;
+                return;
+            }
         }
     }
 

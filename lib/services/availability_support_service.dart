@@ -28,6 +28,9 @@ abstract final class AvailabilitySupportService {
     await _channel.invokeMethod<void>('setEnabled', enabled);
   }
 
+  static Future<void> setHangMode(bool enabled) =>
+      _channel.invokeMethod<void>('setHangMode', enabled);
+
   static Future<int?> importCandidates() =>
       _channel.invokeMethod<int>('importCandidates');
 

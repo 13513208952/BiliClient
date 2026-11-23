@@ -3,9 +3,13 @@ package com.example.piliplus;
 import android.app.Activity;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.os.Build;
 import android.content.Intent;
 import android.net.Uri;
 import android.provider.DocumentsContract;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowManager;
 
 import androidx.annotation.Nullable;
 
@@ -28,6 +32,11 @@ final class AvailabilitySupportChannel {
     private final MethodChannel channel;
     private MethodChannel.Result pickerResult;
     private int pickerRequest;
+    private boolean hanging;
+    private float savedBrightness;
+    private boolean savedKeepScreenOn;
+    private boolean savedStatusVisible;
+    private int savedUiVisibility;
 
     AvailabilitySupportChannel(Activity activity, BinaryMessenger messenger) {
         this.activity = activity;
@@ -49,10 +58,58 @@ final class AvailabilitySupportChannel {
                     return null;
                 });
             }
+            case "setHangMode" -> {
+                if (!(call.arguments instanceof Boolean enabled)) {
+                    result.error("invalid_arguments", "缺少挂机模式状态", null);
+                    return;
+                }
+                setHangMode(enabled);
+                result.success(null);
+            }
             case "importCandidates" -> openPicker(IMPORT_REQUEST, result);
             case "exportResults" -> openPicker(EXPORT_REQUEST, result);
             default -> result.notImplemented();
         }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void setHangMode(boolean enabled) {
+        if (hanging == enabled) return;
+        hanging = enabled;
+        var window = activity.getWindow();
+        var attributes = window.getAttributes();
+        var decor = window.getDecorView();
+        int keepOn = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
+        if (enabled) {
+            savedBrightness = attributes.screenBrightness;
+            savedKeepScreenOn = (attributes.flags & keepOn) != 0;
+            attributes.screenBrightness = 0.06f;
+            attributes.flags |= keepOn;
+        } else {
+            attributes.screenBrightness = savedBrightness;
+            if (!savedKeepScreenOn) attributes.flags &= ~keepOn;
+        }
+        window.setAttributes(attributes);
+        // Leave Android Back available (gesture or three-button navigation).
+        if (Build.VERSION.SDK_INT >= 30) {
+            var controller = window.getInsetsController();
+            if (controller != null) {
+                int statusBars = WindowInsets.Type.statusBars();
+                if (enabled) {
+                    var insets = decor.getRootWindowInsets();
+                    savedStatusVisible = insets == null || insets.isVisible(statusBars);
+                    controller.hide(statusBars);
+                } else if (savedStatusVisible) {
+                    controller.show(statusBars);
+                }
+            }
+        } else if (enabled) {
+            savedUiVisibility = decor.getSystemUiVisibility();
+            decor.setSystemUiVisibility(savedUiVisibility | View.SYSTEM_UI_FLAG_FULLSCREEN);
+        } else {
+            decor.setSystemUiVisibility(savedUiVisibility);
+        }
+        AvailabilityWorker.setHangMode(enabled);
     }
 
     private void openPicker(int request, MethodChannel.Result result) {
@@ -112,6 +169,7 @@ final class AvailabilitySupportChannel {
     }
 
     void close() {
+        setHangMode(false);
         channel.setMethodCallHandler(null);
         if (pickerResult != null) {
             pickerResult.success(null);

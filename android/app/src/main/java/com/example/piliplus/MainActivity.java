@@ -126,6 +126,18 @@ public class MainActivity extends AudioServiceActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        AvailabilityWorker.onWake(getApplicationContext(), this);
+    }
+
+    @Override
+    protected void onStop() {
+        AvailabilityWorker.onHidden(this);
+        super.onStop();
+    }
+
+    @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         if (AndroidHelper.isFoldable) {
