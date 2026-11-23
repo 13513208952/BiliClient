@@ -6,6 +6,7 @@ import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models/model_rec_video_item.dart';
 import 'package:PiliPlus/pages/rcmd/controller.dart';
 import 'package:PiliPlus/services/nostalgia_list_service.dart';
+import 'package:PiliPlus/services/nostalgia_title_filter.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 
@@ -42,6 +43,7 @@ class NostalgiaController extends RcmdController {
     final maxAttempts = _maxAttemptsPerPage < entries.length * 2
         ? _maxAttemptsPerPage
         : entries.length * 2;
+    final titleFilter = NostalgiaTitleFilter.pattern;
 
     while (result.length < pageSize && attempts < maxAttempts) {
       final batch = <NostalgiaEntry>[];
@@ -62,7 +64,9 @@ class NostalgiaController extends RcmdController {
 
       final videos = await Future.wait(batch.map(_fetch));
       for (final video in videos) {
-        if (video != null && result.length < pageSize) {
+        if (video != null &&
+            result.length < pageSize &&
+            titleFilter?.hasMatch(video.title) != true) {
           result.add(video);
         }
       }

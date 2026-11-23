@@ -21,6 +21,8 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 final _setCookieReg = RegExp('(?<=)(,)(?=[^;]+?=)');
 
 class AccountManager extends Interceptor {
+  static const skipErrorToastKey = 'skipErrorToast';
+
   AccountManager();
 
   String blockServer = Pref.blockServer;
@@ -142,7 +144,8 @@ class AccountManager extends Interceptor {
     if (err.requestOptions.responseType == ResponseType.stream) {
       return handler.next(err);
     }
-    if (err.requestOptions.method != 'POST') {
+    if (err.requestOptions.method != 'POST' &&
+        err.requestOptions.extra[skipErrorToastKey] != true) {
       toast(err);
     }
     if (err.response != null &&

@@ -120,7 +120,7 @@ class _VideoReplyReplyPanelState extends State<VideoReplyReplyPanel>
     super.initState();
     _controller = Get.put(
       VideoReplyReplyController(
-        hasRoot: widget.firstFloor != null,
+        firstFloor: widget.firstFloor,
         id: widget.id,
         oid: widget.oid,
         rpid: widget.rpid,
@@ -175,9 +175,6 @@ class _VideoReplyReplyPanelState extends State<VideoReplyReplyPanel>
     );
   }
 
-  ReplyInfo? get firstFloor =>
-      widget.firstFloor ?? _controller.firstFloor.value;
-
   ScrollController get scrollController =>
       _controller.nestedController ?? _controller.scrollController;
 
@@ -192,17 +189,12 @@ class _VideoReplyReplyPanelState extends State<VideoReplyReplyPanel>
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           if (!isDialogue) ...[
-            if ((widget.firstFloor ?? _controller.firstFloor.value)
-                case final firstFloor?)
-              _header(theme, firstFloor)
-            else
-              Obx(() {
-                final firstFloor = _controller.firstFloor.value;
-                if (firstFloor == null) {
-                  return const SliverToBoxAdapter();
-                }
-                return _header(theme, firstFloor);
-              }),
+            Obx(() {
+              final firstFloor = _controller.firstFloor.value;
+              return firstFloor == null
+                  ? const SliverToBoxAdapter()
+                  : _header(theme, firstFloor);
+            }),
             _sortWidget(theme.colorScheme),
           ],
           Obx(
@@ -287,6 +279,13 @@ class _VideoReplyReplyPanelState extends State<VideoReplyReplyPanel>
         itemBuilder: (_, _) => const VideoReplySkeleton(),
         itemCount: 8,
       ),
+      Success(:final response?)
+          when response.isEmpty && !_controller.isEnd =>
+        HttpError(
+          errMsg: '当前页没有符合筛选条件的评论',
+          onReload: _controller.onLoadMore,
+          btnText: '继续加载',
+        ),
       Success(:final response!) => SuperSliverList.builder(
         listController: _controller.listController,
         itemBuilder: (context, index) {

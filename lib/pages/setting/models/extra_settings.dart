@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' show max;
 
+import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/custom_icon.dart';
 import 'package:PiliPlus/common/widgets/dialog/simple_dialog_option.dart';
 import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
@@ -24,6 +25,7 @@ import 'package:PiliPlus/pages/common/slide/common_slide_page.dart';
 import 'package:PiliPlus/pages/home/controller.dart';
 import 'package:PiliPlus/pages/main/controller.dart';
 import 'package:PiliPlus/pages/setting/models/model.dart';
+import 'package:PiliPlus/pages/setting/widgets/multi_select_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/select_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/slider_dialog.dart';
 import 'package:PiliPlus/pages/video/reply/widgets/reply_item_grpc.dart';
@@ -37,6 +39,7 @@ import 'package:PiliPlus/utils/global_data.dart';
 import 'package:PiliPlus/utils/image_utils.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
+import 'package:PiliPlus/utils/reply_author_filter.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -192,6 +195,12 @@ List<SettingsModel> get extraSettings => [
       ReplyGrpc.replyRegExp = value;
       ReplyGrpc.enableFilter = value.pattern.isNotEmpty;
     },
+  ),
+  const NormalModel(
+    title: '评论筛选',
+    subtitle: '按用户名关键词、等级或注册年份隐藏评论',
+    leading: Icon(Icons.filter_alt_outlined),
+    onTap: _showReplyAuthorSettings,
   ),
   const SwitchModel(
     title: '使用外部浏览器打开链接',
@@ -735,6 +744,159 @@ void _showReplyLengthDialog(BuildContext context, VoidCallback setState) {
       ],
     ),
   );
+}
+
+void _showReplyAuthorSettings(BuildContext context, VoidCallback _) {
+  Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (context) => Scaffold(
+        appBar: AppBar(title: const Text('评论筛选')),
+        body: SafeArea(
+          child: ListView(
+            children: _replyAuthorSettings.map((model) => model.widget).toList(),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+List<SettingsModel> get _replyAuthorSettings => [
+  NormalModel(
+    title: '用户名关键词',
+    leading: const Icon(Icons.person_search_outlined),
+    getSubtitle: () {
+      final value = ReplyAuthorFilter.namePattern;
+      return value.isEmpty ? '点击添加' : value;
+    },
+    onTap: _showReplyAuthorNameDialog,
+  ),
+  NormalModel(
+    title: '用户等级',
+    leading: const Icon(Icons.star_outline),
+    getSubtitle: () => _replyAuthorSelection(
+      ReplyAuthorFilter.levels,
+      (value) => 'LV$value',
+    ),
+    onTap: (context, setState) => _showReplyAuthorSelectionDialog(
+      context,
+      setState,
+      title: '按用户等级筛选评论',
+      values: {for (var level = 1; level <= 6; level++) level: 'LV$level'},
+      selected: ReplyAuthorFilter.levels,
+      save: ReplyAuthorFilter.saveLevels,
+    ),
+  ),
+  NormalModel(
+    title: '账号注册年份',
+    leading: const Icon(Icons.calendar_today_outlined),
+    getSubtitle: () {
+      final selection = _replyAuthorSelection(
+        ReplyAuthorFilter.registrationYears,
+        (value) => '$value 年',
+      );
+      return '$selection · 未公开注册时间的账号不会被过滤';
+    },
+    onTap: (context, setState) async {
+      final currentYear = DateTime.now().year;
+      await _showReplyAuthorSelectionDialog(
+        context,
+        setState,
+        title: '按账号注册年份筛选评论',
+        values: {
+          for (
+            var year = ReplyAuthorFilter.firstRegistrationYear;
+            year <= currentYear;
+            year++
+          )
+            year: '$year 年',
+        },
+        selected: ReplyAuthorFilter.registrationYears,
+        save: ReplyAuthorFilter.saveRegistrationYears,
+      );
+    },
+  ),
+];
+
+Future<void> _showReplyAuthorNameDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final formKey = GlobalKey<FormState>();
+  RegExp? pattern;
+  final result = await showDialog<({RegExp? pattern})>(
+    context: context,
+    builder: (context) => AlertDialog(
+      constraints: Style.dialogFixedConstraints,
+      title: const Text('评论用户名关键词过滤'),
+      content: Form(
+        key: formKey,
+        child: TextFormField(
+          autofocus: true,
+          initialValue: ReplyAuthorFilter.namePattern,
+          minLines: 1,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            helperText: '使用 | 隔开多个正则关键词，不区分大小写',
+            helperMaxLines: 2,
+          ),
+          validator: (value) {
+            try {
+              pattern = ReplyAuthorFilter.compileNamePattern(value ?? '');
+              return null;
+            } on FormatException {
+              return '正则表达式无效';
+            }
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: Get.back,
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () {
+            if (formKey.currentState!.validate()) {
+              Navigator.pop(context, (pattern: pattern));
+            }
+          },
+          child: const Text('保存'),
+        ),
+      ],
+    ),
+  );
+  if (result == null) return;
+  await ReplyAuthorFilter.saveNamePattern(result.pattern);
+  if (context.mounted) setState();
+}
+
+String _replyAuthorSelection(
+  Iterable<int> selection,
+  String Function(int) label,
+) => selection.isEmpty
+    ? '未选择'
+    : (selection.toList()..sort()).map(label).join('、');
+
+Future<void> _showReplyAuthorSelectionDialog(
+  BuildContext context,
+  VoidCallback setState, {
+  required String title,
+  required Map<int, String> values,
+  required Iterable<int> selected,
+  required Future<void> Function(Set<int>) save,
+}) async {
+  final result = await showDialog<Set<int>>(
+    context: context,
+    builder: (context) => MultiSelectDialog<int>(
+      title: title,
+      values: values,
+      initValues: selected,
+    ),
+  );
+  if (result == null) return;
+  await save(result);
+  if (context.mounted) setState();
 }
 
 void _showDmHeightDialog(BuildContext context, VoidCallback setState) {

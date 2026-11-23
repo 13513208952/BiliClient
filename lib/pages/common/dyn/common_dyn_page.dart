@@ -192,9 +192,11 @@ mixin CommonDynPageMixin<T extends StatefulWidget>
           );
         }
 
+        final hasMore = !controller.isEnd;
         final child = HttpError(
-          errMsg: '还没有评论',
-          onReload: controller.onReload,
+          errMsg: hasMore ? '当前页没有符合筛选条件的评论' : '还没有评论',
+          onReload: hasMore ? controller.onLoadMore : controller.onReload,
+          btnText: hasMore ? '继续加载' : null,
         );
         if (controller.voteCard case final voteCard?) {
           return SliverMainAxisGroup(

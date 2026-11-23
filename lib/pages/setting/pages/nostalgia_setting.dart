@@ -1,12 +1,17 @@
 import 'dart:async' show unawaited;
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:PiliPlus/common/widgets/flutter/list_tile.dart';
 import 'package:PiliPlus/pages/home/controller.dart';
 import 'package:PiliPlus/pages/nostalgia/controller.dart';
+import 'package:PiliPlus/pages/setting/pages/availability_support_tile.dart';
 import 'package:PiliPlus/services/nostalgia_list_service.dart';
+import 'package:PiliPlus/services/nostalgia_title_filter.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
+import 'package:PiliPlus/utils/storage_utils.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart' hide ListTile;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -50,7 +55,7 @@ class _NostalgiaSettingPageState extends State<NostalgiaSettingPage> {
             ),
             onTap: _busy ? null : () => _setEnabled(!_enabled),
           ),
-          ListTile(
+          ExpansionTile(
             leading: const Icon(Icons.list_alt_outlined),
             title: const Text('AV 列表'),
             subtitle: Text(
@@ -60,43 +65,115 @@ class _NostalgiaSettingPageState extends State<NostalgiaSettingPage> {
                   ? '列表为空'
                   : '$_count 项，下次从第 ${_cursor + 1} 项开始',
             ),
+            children: [
+              ListTile(
+                enabled: !_busy,
+                leading: const Icon(Icons.playlist_add_outlined),
+                title: const Text('导入 AV 列表'),
+                subtitle: const Text('追加新条目并自动去重'),
+                onTap: _import,
+              ),
+              ListTile(
+                enabled: !_busy,
+                leading: const Icon(Icons.find_replace_outlined),
+                title: const Text('覆盖 AV 列表'),
+                subtitle: const Text('用所选 TXT 文件替换当前列表'),
+                onTap: _overwrite,
+              ),
+              ListTile(
+                enabled: !_busy,
+                leading: const Icon(Icons.shuffle_outlined),
+                title: const Text('重置为随机进度'),
+                onTap: _resetRandomCursor,
+              ),
+              ListTile(
+                enabled: !_busy,
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                title: Text(
+                  '清空 AV 列表',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                onTap: _confirmClear,
+              ),
+            ],
           ),
-          const Divider(height: 1),
-          ListTile(
-            enabled: !_busy,
-            leading: const Icon(Icons.playlist_add_outlined),
-            title: const Text('导入 AV 列表'),
-            subtitle: const Text('追加新条目并自动去重'),
-            onTap: _import,
+          ExpansionTile(
+            leading: const Icon(Icons.filter_alt_outlined),
+            title: const Text('标题屏蔽词'),
+            subtitle: const Text('只过滤怀旧推荐，不区分年份'),
+            children: [
+              ListTile(title: const Text('编辑屏蔽词'), onTap: _editTitleRule),
+              ListTile(
+                title: const Text('从 TXT 覆盖导入'),
+                onTap: _importTitleRule,
+              ),
+              ListTile(title: const Text('导出 TXT'), onTap: _exportTitleRule),
+            ],
           ),
-          ListTile(
-            enabled: !_busy,
-            leading: const Icon(Icons.find_replace_outlined),
-            title: const Text('覆盖 AV 列表'),
-            subtitle: const Text('用所选 TXT 文件替换当前列表'),
-            onTap: _overwrite,
+          const AvailabilitySupportTile(),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editTitleRule() async {
+    String value = NostalgiaTitleFilter.text;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('怀旧推荐标题屏蔽词'),
+        content: TextFormField(
+          initialValue: value,
+          decoration: const InputDecoration(
+            helperText: '使用 | 分隔；正则表达式，不区分大小写',
           ),
-          ListTile(
-            enabled: !_busy,
-            leading: const Icon(Icons.shuffle_outlined),
-            title: const Text('重置为随机进度'),
-            onTap: _resetRandomCursor,
+          onChanged: (text) => value = text,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
           ),
-          ListTile(
-            enabled: !_busy,
-            leading: Icon(
-              Icons.delete_outline,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            title: Text(
-              '清空 AV 列表',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-            onTap: _confirmClear,
+          TextButton(
+            onPressed: () => Navigator.pop(context, value),
+            child: const Text('保存'),
           ),
         ],
       ),
     );
+    if (result != null) await _saveTitleRule(result);
+  }
+
+  Future<void> _importTitleRule() async {
+    try {
+      final text = await _pickTextFile();
+      if (text != null) {
+        await _saveTitleRule(NostalgiaTitleFilter.fromTxt(text));
+      }
+    } catch (error) {
+      SmartDialog.showToast('导入失败：$error');
+    }
+  }
+
+  Future<void> _exportTitleRule() => StorageUtils.saveBytes2File(
+    name: '怀旧推荐标题屏蔽词.txt',
+    bytes: Uint8List.fromList(utf8.encode(NostalgiaTitleFilter.text)),
+    allowedExtensions: const ['txt'],
+  );
+
+  Future<void> _saveTitleRule(String text) async {
+    try {
+      await NostalgiaTitleFilter.save(text);
+      _refreshActiveFeed();
+      SmartDialog.showToast('已保存');
+    } on FormatException {
+      SmartDialog.showToast('正则表达式无效，未修改屏蔽词');
+    } catch (error) {
+      SmartDialog.showToast('保存失败：$error');
+    }
   }
 
   Future<void> _reloadStatus() async {

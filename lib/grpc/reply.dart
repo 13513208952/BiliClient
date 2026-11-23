@@ -4,6 +4,7 @@ import 'package:PiliPlus/grpc/bilibili/pagination.pb.dart';
 import 'package:PiliPlus/grpc/grpc_req.dart';
 import 'package:PiliPlus/grpc/url.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/utils/reply_author_filter.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:fixnum/fixnum.dart';
 
@@ -38,7 +39,42 @@ abstract final class ReplyGrpc {
 
   static bool needRemoveGrpc(ReplyInfo reply) {
     return (enableFilter && replyRegExp.hasMatch(reply.content.message)) ||
-        (antiGoodsReply && needRemoveGoodGrpc(reply));
+        (antiGoodsReply && needRemoveGoodGrpc(reply)) ||
+        ReplyAuthorFilter.matchesNameOrLevel(reply);
+  }
+
+  static bool get _hasLocalFilters =>
+      enableFilter || antiGoodsReply || ReplyAuthorFilter.hasNameOrLevelFilter;
+
+  static void _filterReplies(
+    List<ReplyInfo> replies,
+    bool Function(ReplyInfo) matches,
+  ) {
+    replies.removeWhere((reply) {
+      if (matches(reply)) return true;
+      if (reply.replies.isNotEmpty) _filterReplies(reply.replies, matches);
+      return false;
+    });
+  }
+
+  static void _filterMainList(
+    MainListReply response,
+    bool Function(ReplyInfo) matches,
+  ) {
+    if (response.hasUpTop()) {
+      final top = response.upTop;
+      if (matches(top)) {
+        response.clearUpTop();
+      } else if (top.replies.isNotEmpty) {
+        _filterReplies(top.replies, matches);
+      }
+    }
+    if (response.replies.isNotEmpty) _filterReplies(response.replies, matches);
+  }
+
+  static Iterable<ReplyInfo> _mainListRoots(MainListReply response) sync* {
+    if (response.hasUpTop()) yield response.upTop;
+    yield* response.replies;
   }
 
   static Future<LoadingState<MainListReply>> mainList({
@@ -64,19 +100,13 @@ abstract final class ReplyGrpc {
       MainListReply.fromBuffer,
     );
     if (res case Success(:final response)) {
-      // keyword filter
-      if (response.hasUpTop() && needRemoveGrpc(response.upTop)) {
-        response.clearUpTop();
-      }
-
-      if (response.replies.isNotEmpty) {
-        response.replies.removeWhere((item) {
-          final hasMatch = needRemoveGrpc(item);
-          if (!hasMatch && item.replies.isNotEmpty) {
-            item.replies.removeWhere(needRemoveGrpc);
-          }
-          return hasMatch;
-        });
+      if (_hasLocalFilters) _filterMainList(response, needRemoveGrpc);
+      if (ReplyAuthorFilter.hasRegistrationYearFilter) {
+        final lookup = ReplyAuthorFilter.prepareRegistrationYears(
+          _mainListRoots(response),
+        );
+        if (lookup != null) await lookup;
+        _filterMainList(response, ReplyAuthorFilter.matchesRegistrationYear);
       }
     }
     return res;
@@ -103,7 +133,18 @@ abstract final class ReplyGrpc {
       ),
       DetailListReply.fromBuffer,
     );
-    return res..dataOrNull?.root.replies.removeWhere(needRemoveGrpc);
+    if (res case Success(:final response) when response.hasRoot()) {
+      final root = response.root;
+      if (_hasLocalFilters && root.replies.isNotEmpty) {
+        _filterReplies(root.replies, needRemoveGrpc);
+      }
+      if (ReplyAuthorFilter.hasRegistrationYearFilter) {
+        final lookup = ReplyAuthorFilter.prepareRegistrationYears([root]);
+        if (lookup != null) await lookup;
+        _filterReplies(root.replies, ReplyAuthorFilter.matchesRegistrationYear);
+      }
+    }
+    return res;
   }
 
   static Future<LoadingState<DialogListReply>> dialogList({
@@ -124,7 +165,16 @@ abstract final class ReplyGrpc {
       ),
       DialogListReply.fromBuffer,
     );
-    return res..dataOrNull?.replies.removeWhere(needRemoveGrpc);
+    if (res case Success(:final response) when response.replies.isNotEmpty) {
+      final replies = response.replies;
+      if (_hasLocalFilters) _filterReplies(replies, needRemoveGrpc);
+      if (ReplyAuthorFilter.hasRegistrationYearFilter) {
+        final lookup = ReplyAuthorFilter.prepareRegistrationYears(replies);
+        if (lookup != null) await lookup;
+        _filterReplies(replies, ReplyAuthorFilter.matchesRegistrationYear);
+      }
+    }
+    return res;
   }
 
   static Future<LoadingState<SearchItemReply>> searchItem({

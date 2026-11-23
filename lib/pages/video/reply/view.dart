@@ -219,9 +219,13 @@ class _VideoReplyPanelState extends State<VideoReplyPanel>
           );
         }
 
+        final hasMore = !_videoReplyController.isEnd;
         final child = HttpError(
-          errMsg: '还没有评论',
-          onReload: _videoReplyController.onReload,
+          errMsg: hasMore ? '当前页没有符合筛选条件的评论' : '还没有评论',
+          onReload: hasMore
+              ? _videoReplyController.onLoadMore
+              : _videoReplyController.onReload,
+          btnText: hasMore ? '继续加载' : null,
         );
         if (_videoReplyController.voteCard case final voteCard?) {
           return SliverMainAxisGroup(

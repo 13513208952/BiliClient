@@ -28,11 +28,14 @@ public class MainActivity extends AudioServiceActivity {
     private static final String DOWNLOAD_CHANNEL = "com.bilibilitakemeback/download";
     private final ExecutorService muxExecutor = Executors.newSingleThreadExecutor();
     private MethodChannel downloadChannel;
+    private AvailabilitySupportChannel availabilitySupport;
 
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
         super.configureFlutterEngine(flutterEngine);
         AndroidHelper.attachActivity(this);
+        availabilitySupport = new AvailabilitySupportChannel(
+                this, flutterEngine.getDartExecutor().getBinaryMessenger());
         downloadChannel = new MethodChannel(
                 flutterEngine.getDartExecutor().getBinaryMessenger(),
                 DOWNLOAD_CHANNEL);
@@ -91,12 +94,24 @@ public class MainActivity extends AudioServiceActivity {
 
     @Override
     public void cleanUpFlutterEngine(@NonNull FlutterEngine flutterEngine) {
+        if (availabilitySupport != null) {
+            availabilitySupport.close();
+            availabilitySupport = null;
+        }
         if (downloadChannel != null) {
             downloadChannel.setMethodCallHandler(null);
             downloadChannel = null;
         }
         AndroidHelper.detachActivity(this);
         super.cleanUpFlutterEngine(flutterEngine);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        if (availabilitySupport == null
+                || !availabilitySupport.onActivityResult(requestCode, resultCode, data)) {
+            super.onActivityResult(requestCode, resultCode, data);
+        }
     }
 
     @Override

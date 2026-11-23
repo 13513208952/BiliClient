@@ -6,6 +6,7 @@ import 'package:PiliPlus/pages/common/publish/publish_route.dart';
 import 'package:PiliPlus/pages/common/reply_controller.dart';
 import 'package:PiliPlus/pages/video/reply_new/view.dart';
 import 'package:PiliPlus/utils/id_utils.dart';
+import 'package:PiliPlus/utils/reply_author_filter.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:extended_nested_scroll_view/extended_nested_scroll_view.dart';
 import 'package:fixnum/fixnum.dart';
@@ -17,13 +18,17 @@ import 'package:super_sliver_list/super_sliver_list.dart';
 class VideoReplyReplyController extends ReplyController
     with GetSingleTickerProviderStateMixin {
   VideoReplyReplyController({
-    required this.hasRoot,
+    required ReplyInfo? firstFloor,
     required this.id,
     required this.oid,
     required this.rpid,
     required this.dialog,
     required this.replyType,
-  });
+  }) : firstFloor = Rxn(
+         firstFloor != null && ReplyAuthorFilter.matchesCachedAuthor(firstFloor)
+             ? null
+             : firstFloor,
+       );
   final int? dialog;
   int? id;
   // 视频aid 请求时使用的oid
@@ -32,8 +37,7 @@ class VideoReplyReplyController extends ReplyController
   int rpid;
   int replyType;
 
-  bool hasRoot = false;
-  final firstFloor = Rxn<ReplyInfo>();
+  final Rxn<ReplyInfo> firstFloor;
 
   final index = RxnInt();
 
@@ -74,8 +78,13 @@ class VideoReplyReplyController extends ReplyController
     // reply2Reply // isDialogue.not
     if (data is DetailListReply) {
       count.value = data.root.count.toInt();
-      if (isRefresh && !hasRoot) {
-        firstFloor.value ??= data.root;
+      if (isRefresh && data.hasRoot()) {
+        final root = data.root;
+        if (ReplyAuthorFilter.matchesCachedAuthor(root)) {
+          firstFloor.value = null;
+        } else {
+          firstFloor.value ??= root;
+        }
       }
       if (id != null) {
         setIndexById(Int64(id!), data.root.replies);
@@ -83,7 +92,7 @@ class VideoReplyReplyController extends ReplyController
       }
     }
 
-    return false;
+    return keepPagingAfterEmptyPage(isRefresh, getDataList(data)!);
   }
 
   bool setIndexById(Int64 id64, [List<ReplyInfo>? replies]) {
@@ -180,16 +189,21 @@ class VideoReplyReplyController extends ReplyController
             },
           ),
         )
-        .then((replyInfo) {
+        .then((replyInfo) async {
           if (replyInfo is ReplyInfo) {
             savedReplies.remove(key);
-
-            count.value += 1;
-            loadingState
-              ..value.dataOrNull?.insert(index! + 1, replyInfo)
-              ..refresh();
             if (enableCommAntifraud) {
               onCheckReply(replyInfo, isManual: false);
+            }
+            final hidden = await ReplyAuthorFilter.hidesPublishedReply(
+              replyInfo,
+            );
+            if (isClosed) return;
+            count.value += 1;
+            if (!hidden) {
+              loadingState
+                ..value.dataOrNull?.insert(index! + 1, replyInfo)
+                ..refresh();
             }
           }
         });

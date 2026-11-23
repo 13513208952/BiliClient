@@ -32,6 +32,9 @@ import 'package:PiliPlus/models_new/space/space_season_series/item.dart';
 import 'package:PiliPlus/models_new/space/space_shop/data.dart';
 import 'package:PiliPlus/models_new/upower_rank/data.dart';
 import 'package:PiliPlus/utils/accounts.dart';
+import 'package:PiliPlus/utils/accounts/account.dart' show AnonymousAccount;
+import 'package:PiliPlus/utils/accounts/account_manager/account_mgr.dart'
+    show AccountManager;
 import 'package:PiliPlus/utils/app_sign.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:PiliPlus/utils/wbi_sign.dart';
@@ -253,6 +256,8 @@ abstract final class MemberHttp {
   static Future<LoadingState<SpaceData>> space({
     int? mid,
     dynamic fromViewAid,
+    CancelToken? cancelToken,
+    bool publicLookup = false,
   }) async {
     final params = {
       'build': 8430300,
@@ -269,7 +274,14 @@ abstract final class MemberHttp {
     final res = await Request().get(
       Api.space,
       queryParameters: params,
+      cancelToken: cancelToken,
       options: Options(
+        extra: publicLookup
+            ? {
+                'account': AnonymousAccount(),
+                AccountManager.skipErrorToastKey: true,
+              }
+            : null,
         headers: {
           'bili-http-engine': 'cronet',
           'user-agent': Constants.userAgentApp,

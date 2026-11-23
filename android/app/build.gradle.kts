@@ -39,6 +39,7 @@ android {
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.0")
+    implementation("androidx.work:work-runtime:2.11.2")
     implementation("com.antonkarpenko:ffmpeg-kit-full:2.1.0")
 }
 

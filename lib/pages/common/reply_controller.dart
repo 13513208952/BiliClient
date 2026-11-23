@@ -9,6 +9,7 @@ import 'package:PiliPlus/pages/common/common_list_controller.dart';
 import 'package:PiliPlus/pages/common/publish/publish_route.dart';
 import 'package:PiliPlus/pages/video/reply_new/view.dart';
 import 'package:PiliPlus/utils/feed_back.dart';
+import 'package:PiliPlus/utils/reply_author_filter.dart';
 import 'package:PiliPlus/utils/reply_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:fixnum/fixnum.dart';
@@ -73,7 +74,24 @@ abstract class ReplyController<R> extends CommonListController<R, ReplyInfo> {
       }
     }
     isEnd = data.cursor.isEnd;
-    return false;
+    return keepPagingAfterEmptyPage(isRefresh, data.replies);
+  }
+
+  // The server cursor, not the filtered item count, decides whether more
+  // comments exist. CommonListController otherwise ends on any empty page.
+  @protected
+  bool keepPagingAfterEmptyPage(bool isRefresh, List<ReplyInfo> replies) {
+    if (isEnd ||
+        replies.isNotEmpty ||
+        paginationReply?.nextOffset.isNotEmpty != true) {
+      return false;
+    }
+    if (isRefresh) {
+      loadingState.value = Success(replies);
+    } else {
+      loadingState.refresh();
+    }
+    return true;
   }
 
   @override
@@ -171,30 +189,28 @@ abstract class ReplyController<R> extends CommonListController<R, ReplyInfo> {
           ),
         )
         .then(
-          (replyInfo) {
+          (replyInfo) async {
             if (replyInfo is ReplyInfo) {
               savedReplies.remove(key);
-              if (loadingState.value case Success(:final response)) {
-                if (response == null) {
-                  loadingState.value = Success([replyInfo]);
-                } else {
-                  if (oid != null) {
-                    response.insert(hasUpTop ? 1 : 0, replyInfo);
-                  } else {
-                    replyItem!
-                      ..count += 1
-                      ..replies.add(replyInfo);
-                  }
-                  loadingState.refresh();
-                }
-              } else {
-                loadingState.value = Success([replyInfo]);
-              }
-              count.value += 1;
-
-              // check reply
               if (enableCommAntifraud) {
                 onCheckReply(replyInfo, isManual: false);
+              }
+              final hidden = await ReplyAuthorFilter.hidesPublishedReply(
+                replyInfo,
+              );
+              if (isClosed) return;
+              count.value += 1;
+              if (oid == null) replyItem!.count += 1;
+              if (hidden) return;
+              if (loadingState.value case Success(:final response?)) {
+                if (oid != null) {
+                  response.insert(hasUpTop ? 1 : 0, replyInfo);
+                } else {
+                  replyItem!.replies.add(replyInfo);
+                }
+                loadingState.refresh();
+              } else {
+                loadingState.value = Success([replyInfo]);
               }
             }
           },

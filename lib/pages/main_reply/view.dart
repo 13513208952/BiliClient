@@ -156,6 +156,12 @@ class _MainReplyPageState extends State<MainReplyPage>
                   }
                 },
               )
+            : !_controller.isEnd
+            ? HttpError(
+                errMsg: '当前页没有符合筛选条件的评论',
+                onReload: _controller.onLoadMore,
+                btnText: '继续加载',
+              )
             : HttpError(
                 errMsg: '还没有评论',
                 onReload: _controller.onReload,
