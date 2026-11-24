@@ -54,8 +54,16 @@ final class AvailabilityStore extends SQLiteOpenHelper {
         setWriteAheadLoggingEnabled(true);
         resolver = context.getContentResolver();
         prefs = context.getSharedPreferences("availability-support", Context.MODE_PRIVATE);
-        strategy = AvailabilityPressure.Strategy.valueOf(
-                prefs.getString(STRATEGY, AvailabilityPressure.Strategy.NORMAL.name()));
+        String saved = prefs.getString(STRATEGY, AvailabilityPressure.Strategy.NORMAL.name());
+        if ("CONSERVATIVE".equals(saved)) {
+            saved = AvailabilityPressure.Strategy.COMPATIBLE.name();
+            prefs.edit().putString(STRATEGY, saved).apply();
+        }
+        strategy = AvailabilityPressure.Strategy.valueOf(saved);
+    }
+
+    boolean reusesConnections() {
+        return strategy == AvailabilityPressure.Strategy.COMPATIBLE;
     }
 
     void setStrategy(AvailabilityPressure.Strategy value) throws IOException {

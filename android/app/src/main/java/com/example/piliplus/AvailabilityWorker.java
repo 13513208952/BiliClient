@@ -48,6 +48,14 @@ public final class AvailabilityWorker extends Worker {
     private static final long INVALID_INTEGER = Long.MIN_VALUE;
     private static final AvailabilityLanes LANES =
             new AvailabilityLanes(SystemClock::elapsedRealtime, FOREGROUND_MS);
+    private static Network pooledWifi;
+
+    private static synchronized Network pooledWifi(Network current) {
+        // Android attaches its URL factory (and pool) to the Network object,
+        // not its ID. Binder returns a new object for repeated lookups.
+        if (current == null || !current.equals(pooledWifi)) pooledWifi = current;
+        return pooledWifi;
+    }
 
     static void setEnabled(Context context, AvailabilityStore store, boolean enabled)
             throws IOException, ExecutionException, InterruptedException {
@@ -150,12 +158,14 @@ public final class AvailabilityWorker extends Worker {
         ConnectivityManager networks = context.getSystemService(ConnectivityManager.class);
         while (lease.live() && store.isEnabled() && !store.isCoolingDown(isHangMode())) {
             Network wifi = activeWifi(networks);
+            boolean reuseConnections = store.reusesConnections();
+            if (reuseConnections) wifi = pooledWifi(wifi);
             if (wifi == null) return Result.retry();
             if (store.resourcePaused()) return Result.retry();
             long aid = store.claimCandidate();
             if (aid == 0) return Result.success();
             try {
-                Observation observation = fetch(networks, wifi, store, aid, lease);
+                Observation observation = fetch(networks, wifi, store, aid, lease, reuseConnections);
                 if (observation == null || !lease.live() || !store.isEnabled()
                         || !wifi.equals(activeWifi(networks))) {
                     return Result.retry();
@@ -195,13 +205,15 @@ public final class AvailabilityWorker extends Worker {
     }
 
     private static Observation fetch(ConnectivityManager networks, Network wifi,
-            AvailabilityStore store, long aid, AvailabilityLanes.Lease lease) throws IOException {
+            AvailabilityStore store, long aid, AvailabilityLanes.Lease lease,
+            boolean reuseConnections) throws IOException {
         // Bind DNS and sockets to this Wi-Fi Network, with no fallback to the default route.
         HttpURLConnection http = (HttpURLConnection) wifi.openConnection(new URL(VIEW_API + aid));
         if (!lease.attach(http)) {
             http.disconnect();
             return null;
         }
+        boolean consumed = false;
         try {
             http.setConnectTimeout(10_000);
             http.setReadTimeout(10_000);
@@ -222,13 +234,16 @@ public final class AvailabilityWorker extends Worker {
             if (status != HttpURLConnection.HTTP_OK) {
                 throw new IOException("Unexpected HTTP status");
             }
+            Observation observation;
             try (JsonReader json = new JsonReader(new InputStreamReader(
                     new BoundedResponse(http.getInputStream(), deadline),
                     StandardCharsets.UTF_8.newDecoder()))) {
-                return parseObservation(json, aid, http.getHeaderField("Retry-After"));
+                observation = parseObservation(json, aid, http.getHeaderField("Retry-After"));
             }
+            consumed = true;
+            return observation;
         } finally {
-            if (lease.detach(http)) http.disconnect();
+            if (lease.detach(http) && (!reuseConnections || !consumed)) http.disconnect();
         }
     }
 

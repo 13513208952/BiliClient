@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
 enum AvailabilityStrategy {
-  conservative('保守策略'),
+  compatible('兼容策略'),
   normal('常规策略'),
   aggressive('激进策略');
 

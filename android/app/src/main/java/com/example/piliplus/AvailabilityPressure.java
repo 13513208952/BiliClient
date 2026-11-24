@@ -5,7 +5,7 @@ import android.os.SystemClock;
 /** Admission gate shared by all verifier lanes; it never cancels in-flight requests. */
 final class AvailabilityPressure {
     enum Strategy {
-        CONSERVATIVE(85, 70),
+        COMPATIBLE(85, 70),
         NORMAL(90, 78),
         AGGRESSIVE(0, 0);
 
