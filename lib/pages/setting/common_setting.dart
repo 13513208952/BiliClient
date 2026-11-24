@@ -1,5 +1,6 @@
 import 'package:PiliPlus/models/common/setting_type.dart';
 import 'package:PiliPlus/pages/setting/models/model.dart';
+import 'package:PiliPlus/pages/setting/pages/recommend_history_tile.dart';
 import 'package:flutter/material.dart';
 
 class CommonSetting extends StatefulWidget {
@@ -57,8 +58,10 @@ class _CommonSettingState extends State<CommonSetting> {
           right: showAppBar ? padding.right : 0,
           bottom: padding.bottom + 100,
         ),
-        itemCount: settings.length,
-        itemBuilder: (context, index) => settings[index].widget,
+        itemCount: settings.length + (widget.settingType == .recommendSetting ? 1 : 0),
+        itemBuilder: (context, index) => index == settings.length
+            ? const RecommendHistoryTile()
+            : settings[index].widget,
       ),
     );
   }

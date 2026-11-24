@@ -29,12 +29,15 @@ public class MainActivity extends AudioServiceActivity {
     private final ExecutorService muxExecutor = Executors.newSingleThreadExecutor();
     private MethodChannel downloadChannel;
     private AvailabilitySupportChannel availabilitySupport;
+    private RecommendArchiveChannel recommendArchive;
 
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
         super.configureFlutterEngine(flutterEngine);
         AndroidHelper.attachActivity(this);
         availabilitySupport = new AvailabilitySupportChannel(
+                this, flutterEngine.getDartExecutor().getBinaryMessenger());
+        recommendArchive = new RecommendArchiveChannel(
                 this, flutterEngine.getDartExecutor().getBinaryMessenger());
         downloadChannel = new MethodChannel(
                 flutterEngine.getDartExecutor().getBinaryMessenger(),
@@ -98,6 +101,10 @@ public class MainActivity extends AudioServiceActivity {
             availabilitySupport.close();
             availabilitySupport = null;
         }
+        if (recommendArchive != null) {
+            recommendArchive.close();
+            recommendArchive = null;
+        }
         if (downloadChannel != null) {
             downloadChannel.setMethodCallHandler(null);
             downloadChannel = null;
@@ -108,6 +115,8 @@ public class MainActivity extends AudioServiceActivity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        if (recommendArchive != null
+                && recommendArchive.onActivityResult(requestCode, resultCode, data)) return;
         if (availabilitySupport == null
                 || !availabilitySupport.onActivityResult(requestCode, resultCode, data)) {
             super.onActivityResult(requestCode, resultCode, data);

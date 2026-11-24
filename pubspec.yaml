@@ -147,6 +147,7 @@ dependencies:
   screen_retriever: ^0.2.0
   share_plus: ^13.1.0
   sqlite3: ^3.5.0
+  visibility_detector: ^0.4.0+2
   stream_transform: ^2.1.1
   super_sliver_list:
     git:

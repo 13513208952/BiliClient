@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:PiliPlus/common/skeleton/video_card_v.dart';
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
@@ -5,10 +7,12 @@ import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/video_card/video_card_v.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/pages/rcmd/controller.dart';
+import 'package:PiliPlus/services/recommend_history.dart';
 import 'package:PiliPlus/utils/grid.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 class RcmdPage extends StatefulWidget {
   const RcmdPage({super.key, this.controllerBuilder});
@@ -99,8 +103,8 @@ class _RcmdPageState extends State<RcmdPage>
                     final actualIndex = index > controller.lastRefreshAt!
                         ? index - 1
                         : index;
-                    return VideoCardV(
-                      videoItem: response[actualIndex],
+                    return _card(
+                      response[actualIndex],
                       onRemove: () {
                         if (controller.lastRefreshAt != null &&
                             actualIndex < controller.lastRefreshAt!) {
@@ -113,8 +117,8 @@ class _RcmdPageState extends State<RcmdPage>
                       },
                     );
                   } else {
-                    return VideoCardV(
-                      videoItem: response[index],
+                    return _card(
+                      response[index],
                       onRemove: () => controller.loadingState
                         ..value.data!.removeAt(index)
                         ..refresh(),
@@ -133,9 +137,83 @@ class _RcmdPageState extends State<RcmdPage>
     };
   }
 
+  Widget _card(dynamic item, {required VoidCallback onRemove}) {
+    final card = VideoCardV(videoItem: item, onRemove: onRemove);
+    final account = controller.displayedAccount;
+    if (!controller.supportsRecommendHistory ||
+        !RecommendHistory.enabled ||
+        account == null) {
+      return card;
+    }
+    final aid = RecommendHistory.aidOf(item);
+    if (aid == null) return card;
+    return _ExposureCard(
+      key: ValueKey((account, aid, identityHashCode(item))),
+      onExposure: () => controller.recordExposure(account, aid),
+      child: card,
+    );
+  }
+
   Widget get _buildSkeleton => SliverGrid.builder(
     gridDelegate: gridDelegate,
     itemBuilder: (context, index) => const VideoCardVSkeleton(),
     itemCount: 10,
+  );
+}
+
+class _ExposureCard extends StatefulWidget {
+  const _ExposureCard({
+    required super.key,
+    required this.onExposure,
+    required this.child,
+  });
+
+  final Future<void> Function() onExposure;
+  final Widget child;
+
+  @override
+  State<_ExposureCard> createState() => _ExposureCardState();
+}
+
+class _ExposureCardState extends State<_ExposureCard> {
+  Timer? _timer;
+  bool _recorded = false;
+  bool _visible = false;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => VisibilityDetector(
+    key: widget.key!,
+    onVisibilityChanged: (info) {
+      if (!mounted || _recorded) return;
+      _visible = info.visibleFraction >= 0.5;
+      if (!_visible) {
+        _timer?.cancel();
+        _timer = null;
+        return;
+      }
+      _timer ??= Timer(const Duration(milliseconds: 300), () async {
+        VisibilityDetectorController.instance.notifyNow();
+        _timer = null;
+        if (!mounted || !_visible ||
+            ModalRoute.of(context)?.isCurrent != true ||
+            WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+          return;
+        }
+        try {
+          _recorded = true;
+          await widget.onExposure();
+        } catch (error, stack) {
+          _recorded = false;
+          FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
+        }
+      });
+    },
+    child: widget.child,
   );
 }

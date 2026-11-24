@@ -16,6 +16,9 @@ import 'package:PiliPlus/utils/storage_key.dart';
 /// 清单耗尽后回到开头继续循环。失效条目按有界次数跳过，
 /// 不会因为坏数据无限扫表。
 class NostalgiaController extends RcmdController {
+  @override
+  bool get supportsRecommendHistory => false;
+
   static const int pageSize = 20;
   static const int _concurrency = 4;
   static const int _maxAttemptsPerPage = 200;
