@@ -116,8 +116,8 @@ class _AndroidAvailabilitySupportTileState
               selected: strategy == current,
               title: Text(strategy.label),
               subtitle: Text(switch (strategy) {
-                .conservative => '堆用量 85% 或线程数过高时暂停',
-                .normal => '默认 · 堆用量 90% 或线程数过高时暂停',
+                .conservative => 'Java 堆达到 85% 暂停，降至 70% 恢复',
+                .normal => '默认 · Java 堆达到 90% 暂停，降至 78% 恢复',
                 .aggressive => '不限制资源水位，可能因内存耗尽退出',
               }),
               onTap: () => Navigator.pop(context, strategy),
