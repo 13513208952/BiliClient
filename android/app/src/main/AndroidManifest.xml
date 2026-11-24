@@ -36,6 +36,7 @@
     <application
         android:name="${applicationName}"
         android:icon="@mipmap/revideo_ic_launcher"
+        android:largeHeap="true"
         android:label="BiliClient">
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"

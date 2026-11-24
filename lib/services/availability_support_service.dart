@@ -1,10 +1,22 @@
 import 'package:flutter/services.dart';
 
+enum AvailabilityStrategy {
+  conservative('保守策略'),
+  normal('常规策略'),
+  aggressive('激进策略');
+
+  const AvailabilityStrategy(this.label);
+
+  final String label;
+}
+
 typedef AvailabilitySupportStatus = ({
   bool enabled,
   int pending,
   int results,
   bool coolingDown,
+  AvailabilityStrategy strategy,
+  bool resourcePaused,
 });
 
 abstract final class AvailabilitySupportService {
@@ -21,6 +33,10 @@ abstract final class AvailabilitySupportService {
       pending: status['pending'] as int,
       results: status['results'] as int,
       coolingDown: status['coolingDown'] as bool,
+      strategy: AvailabilityStrategy.values.byName(
+        (status['strategy'] as String).toLowerCase(),
+      ),
+      resourcePaused: status['resourcePaused'] as bool,
     );
   }
 
@@ -30,6 +46,9 @@ abstract final class AvailabilitySupportService {
 
   static Future<void> setHangMode(bool enabled) =>
       _channel.invokeMethod<void>('setHangMode', enabled);
+
+  static Future<void> setStrategy(AvailabilityStrategy strategy) =>
+      _channel.invokeMethod<void>('setStrategy', strategy.name.toUpperCase());
 
   static Future<int?> importCandidates() =>
       _channel.invokeMethod<int>('importCandidates');

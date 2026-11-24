@@ -29,6 +29,7 @@ import java.util.regex.Pattern;
 final class AvailabilityStore extends SQLiteOpenHelper {
     private static final Pattern AV_LINE = Pattern.compile("av([1-9][0-9]*)");
     private static final String ENABLED = "enabled";
+    private static final String STRATEGY = "strategy";
     private static final String RISK_UNTIL = "risk_until_ms";
     private static final String HANG_RISK_UNTIL = "hang_risk_until_ms";
     private static final String RISK_FAILURES = "risk_failures";
@@ -43,6 +44,8 @@ final class AvailabilityStore extends SQLiteOpenHelper {
 
     private final ContentResolver resolver;
     private final SharedPreferences prefs;
+    private final AvailabilityPressure pressure = new AvailabilityPressure();
+    private volatile AvailabilityPressure.Strategy strategy;
     // A claim remains pending on disk until checkpointed; it survives process death.
     private final long[] claimed = new long[AvailabilityLanes.LIMIT];
 
@@ -51,6 +54,19 @@ final class AvailabilityStore extends SQLiteOpenHelper {
         setWriteAheadLoggingEnabled(true);
         resolver = context.getContentResolver();
         prefs = context.getSharedPreferences("availability-support", Context.MODE_PRIVATE);
+        strategy = AvailabilityPressure.Strategy.valueOf(
+                prefs.getString(STRATEGY, AvailabilityPressure.Strategy.NORMAL.name()));
+    }
+
+    void setStrategy(AvailabilityPressure.Strategy value) throws IOException {
+        if (!prefs.edit().putString(STRATEGY, value.name()).commit()) {
+            throw new IOException("无法保存采集策略");
+        }
+        strategy = value;
+    }
+
+    boolean resourcePaused() {
+        return pressure.paused(strategy);
     }
 
     @Override
@@ -112,11 +128,13 @@ final class AvailabilityStore extends SQLiteOpenHelper {
         try (Cursor counts = getReadableDatabase().rawQuery(
                 "SELECT (SELECT count(*) FROM pending), (SELECT count(*) FROM results)", null)) {
             counts.moveToFirst();
-            Map<String, Object> status = new ArrayMap<>(4);
+            Map<String, Object> status = new ArrayMap<>(6);
             status.put("enabled", isEnabled());
             status.put("pending", counts.getLong(0));
             status.put("results", counts.getLong(1));
             status.put("coolingDown", isCoolingDown(AvailabilityWorker.isHangMode()));
+            status.put("strategy", strategy.name());
+            status.put("resourcePaused", isEnabled() && resourcePaused());
             return status;
         }
     }

@@ -30,11 +30,15 @@ class _AndroidAvailabilitySupportTileState
   AvailabilitySupportStatus? _status;
   bool _loading = true;
   bool _busy = false;
+  int _hideGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _lifecycle = AppLifecycleListener(onResume: _refresh);
+    _lifecycle = AppLifecycleListener(
+      onResume: _refresh,
+      onHide: () => _hideGeneration++,
+    );
     _loadStatus();
   }
 
@@ -87,9 +91,10 @@ class _AndroidAvailabilitySupportTileState
   }
 
   Future<void> _openHangPage() => _perform(() async {
+    final generation = _hideGeneration;
     await AvailabilitySupportService.setHangMode(true);
     try {
-      if (mounted) {
+      if (mounted && generation == _hideGeneration) {
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(builder: (_) => const AvailabilityHangPage()),
         );
@@ -99,6 +104,34 @@ class _AndroidAvailabilitySupportTileState
     }
     return null;
   }, '无法开启挂机验证');
+
+  Future<void> _chooseStrategy(AvailabilityStrategy current) async {
+    final selected = await showDialog<AvailabilityStrategy>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('采集策略模式'),
+        children: [
+          for (final strategy in AvailabilityStrategy.values)
+            ListTile(
+              selected: strategy == current,
+              title: Text(strategy.label),
+              subtitle: Text(switch (strategy) {
+                .conservative => '堆用量 85% 或线程数过高时暂停',
+                .normal => '默认 · 堆用量 90% 或线程数过高时暂停',
+                .aggressive => '不限制资源水位，可能因内存耗尽退出',
+              }),
+              onTap: () => Navigator.pop(context, strategy),
+            ),
+        ],
+      ),
+    );
+    if (mounted && selected != null && selected != current) {
+      await _perform(() async {
+        await AvailabilitySupportService.setStrategy(selected);
+        return null;
+      }, '无法更改采集策略');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -125,6 +158,7 @@ class _AndroidAvailabilitySupportTileState
             status != null
                 ? '${status.pending} 条待验证 · ${status.results} 条结果'
                       '${status.enabled && status.coolingDown ? ' · 风控等待中' : ''}'
+                      '${status.resourcePaused ? ' · 资源保护暂停中' : ''}'
                 : _loading
                 ? '正在读取'
                 : '无法读取验证队列',
@@ -133,6 +167,17 @@ class _AndroidAvailabilitySupportTileState
             if (expanded) _refresh();
           },
           children: [
+            ListTile(
+              leading: const Icon(Icons.tune),
+              title: const Text('采集策略模式'),
+              subtitle: Text(
+                (status?.strategy ?? AvailabilityStrategy.normal).label,
+              ),
+              enabled: !_busy && status != null,
+              onTap: _busy || status == null
+                  ? null
+                  : () => _chooseStrategy(status.strategy),
+            ),
             ListTile(
               leading: const Icon(Icons.nights_stay_outlined),
               title: const Text('进入挂机验证'),

@@ -133,6 +133,7 @@ public class MainActivity extends AudioServiceActivity {
 
     @Override
     protected void onStop() {
+        if (availabilitySupport != null) availabilitySupport.setHangMode(false);
         AvailabilityWorker.onHidden(this);
         super.onStop();
     }

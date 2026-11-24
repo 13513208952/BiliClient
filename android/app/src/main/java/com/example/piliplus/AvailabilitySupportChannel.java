@@ -48,6 +48,11 @@ final class AvailabilitySupportChannel {
     private void handle(MethodCall call, MethodChannel.Result result) {
         switch (call.method) {
             case "status" -> run(result, () -> AvailabilityStore.get(context).status());
+            case "setStrategy" -> run(result, () -> {
+                AvailabilityStore.get(context).setStrategy(
+                        AvailabilityPressure.Strategy.valueOf((String) call.arguments));
+                return null;
+            });
             case "setEnabled" -> {
                 if (!(call.arguments instanceof Boolean enabled)) {
                     result.error("invalid_arguments", "缺少后台验证开关值", null);
@@ -73,7 +78,7 @@ final class AvailabilitySupportChannel {
     }
 
     @SuppressWarnings("deprecation")
-    private void setHangMode(boolean enabled) {
+    void setHangMode(boolean enabled) {
         if (hanging == enabled) return;
         hanging = enabled;
         var window = activity.getWindow();

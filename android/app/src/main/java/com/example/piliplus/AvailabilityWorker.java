@@ -151,6 +151,7 @@ public final class AvailabilityWorker extends Worker {
         while (lease.live() && store.isEnabled() && !store.isCoolingDown(isHangMode())) {
             Network wifi = activeWifi(networks);
             if (wifi == null) return Result.retry();
+            if (store.resourcePaused()) return Result.retry();
             long aid = store.claimCandidate();
             if (aid == 0) return Result.success();
             try {

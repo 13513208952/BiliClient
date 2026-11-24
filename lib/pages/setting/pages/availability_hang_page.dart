@@ -16,6 +16,7 @@ class _AvailabilityHangPageState extends State<AvailabilityHangPage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _drift;
   late final Timer _refreshTimer;
+  late final AppLifecycleListener _lifecycle;
   AvailabilitySupportStatus? _status;
   bool _reading = false;
   bool _failed = false;
@@ -23,6 +24,7 @@ class _AvailabilityHangPageState extends State<AvailabilityHangPage>
   @override
   void initState() {
     super.initState();
+    _lifecycle = AppLifecycleListener(onHide: _leaveHangPage);
     _drift = AnimationController(
       vsync: this,
       duration: const Duration(minutes: 5),
@@ -35,9 +37,17 @@ class _AvailabilityHangPageState extends State<AvailabilityHangPage>
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _refreshTimer.cancel();
     _drift.dispose();
     super.dispose();
+  }
+
+  void _leaveHangPage() {
+    final route = ModalRoute.of(context);
+    if (route != null && route.isActive) {
+      route.navigator!.removeRoute(route);
+    }
   }
 
   Future<void> _refresh() async {
@@ -106,7 +116,11 @@ class _AvailabilityHangPageState extends State<AvailabilityHangPage>
                 ),
                 const SizedBox(height: 7),
                 Text(
-                  _failed ? '暂时无法读取进度' : status == null ? '读取中' : '$done / $total',
+                  _failed
+                      ? '暂时无法读取进度'
+                      : status == null
+                      ? '读取中'
+                      : '$done / $total${status.resourcePaused ? ' · 资源保护暂停' : ''}',
                   style: const TextStyle(
                     color: Color(0xff444442),
                     fontSize: 13,
