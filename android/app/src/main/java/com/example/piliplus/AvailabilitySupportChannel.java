@@ -72,6 +72,7 @@ final class AvailabilitySupportChannel {
                 result.success(null);
             }
             case "importCandidates" -> openPicker(IMPORT_REQUEST, result);
+            case "clearPending" -> run(result, () -> AvailabilityStore.get(context).clearPending());
             case "exportResults" -> openPicker(EXPORT_REQUEST, result);
             default -> result.notImplemented();
         }

@@ -8,6 +8,7 @@ import 'package:PiliPlus/pages/nostalgia/controller.dart';
 import 'package:PiliPlus/pages/setting/pages/availability_support_tile.dart';
 import 'package:PiliPlus/services/nostalgia_list_service.dart';
 import 'package:PiliPlus/services/nostalgia_title_filter.dart';
+import 'package:PiliPlus/services/nostalgia_uploader_filter.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -113,11 +114,48 @@ class _NostalgiaSettingPageState extends State<NostalgiaSettingPage> {
               ListTile(title: const Text('导出 TXT'), onTap: _exportTitleRule),
             ],
           ),
+          ExpansionTile(
+            leading: const Icon(Icons.person_off_outlined),
+            title: const Text('怀旧模式 UP 主拦截列表'),
+            subtitle: Text('当前拦截对象数量：${NostalgiaUploaderFilter.count}'),
+            children: [
+              ListTile(
+                title: const Text('从 TXT 覆盖导入'),
+                onTap: _importUploaders,
+              ),
+              ListTile(
+                title: const Text('导出 TXT'),
+                onTap: _exportUploaders,
+              ),
+            ],
+          ),
           const AvailabilitySupportTile(),
         ],
       ),
     );
   }
+
+  Future<void> _importUploaders() async {
+    try {
+      final text = await _pickTextFile();
+      if (text == null) return;
+      await NostalgiaUploaderFilter.overwrite(text);
+      if (Get.isRegistered<NostalgiaController>()) {
+        Get.find<NostalgiaController>().hideBlockedVideos();
+      }
+      _refreshActiveFeed();
+      if (mounted) setState(() {});
+      SmartDialog.showToast('已覆盖导入 UP 主拦截列表');
+    } catch (error) {
+      SmartDialog.showToast('导入失败：$error');
+    }
+  }
+
+  Future<void> _exportUploaders() => StorageUtils.saveBytes2File(
+    name: '怀旧模式UP主拦截列表.txt',
+    bytes: Uint8List.fromList(utf8.encode(NostalgiaUploaderFilter.exportText())),
+    allowedExtensions: const ['txt'],
+  );
 
   Future<void> _editTitleRule() async {
     String value = NostalgiaTitleFilter.text;

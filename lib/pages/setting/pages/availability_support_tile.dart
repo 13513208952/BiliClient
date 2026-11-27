@@ -133,6 +133,31 @@ class _AndroidAvailabilitySupportTileState
     }
   }
 
+  Future<void> _confirmClearPending() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清空待验证列表？'),
+        content: const Text('将删除手机上的所有待验证任务，已保存的验证结果不会删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('确认清空', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _perform(() async {
+      final count = await AvailabilitySupportService.clearPending();
+      return '已清空 $count 条待验证任务';
+    }, '清空失败');
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = _status;
@@ -198,6 +223,12 @@ class _AndroidAvailabilitySupportTileState
                 final count = await AvailabilitySupportService.importCandidates();
                 return count == null ? null : '新增 $count 条待验证 AV';
               }, '导入失败'),
+            ),
+            ListTile(
+              enabled: !_busy && (status?.pending ?? 0) > 0,
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('清空待验证列表'),
+              onTap: _confirmClearPending,
             ),
             ListTile(
               enabled: !_busy && (status?.results ?? 0) > 0,

@@ -225,12 +225,17 @@ final class AvailabilityStore extends SQLiteOpenHelper {
                 new Object[]{System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(15), aid});
     }
 
+    int clearPending() {
+        return getWritableDatabase().delete("pending", null, null);
+    }
+
     void checkpoint(long aid, String state, long code, String message) {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransactionNonExclusive();
         try {
-            db.execSQL("INSERT INTO results(aid,state,code,message,fetched_at_utc) VALUES(?,?,?,?,?)",
-                    new Object[]{aid, state, code, message, Instant.now().toString()});
+            db.execSQL("INSERT INTO results(aid,state,code,message,fetched_at_utc) "
+                            + "SELECT aid,?,?,?,? FROM pending WHERE aid=?",
+                    new Object[]{state, code, message, Instant.now().toString(), aid});
             db.execSQL("DELETE FROM pending WHERE aid=?", new Object[]{aid});
             db.setTransactionSuccessful();
         } finally {

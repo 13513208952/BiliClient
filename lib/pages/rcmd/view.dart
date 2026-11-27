@@ -6,11 +6,16 @@ import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/video_card/video_card_v.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/model_rec_video_item.dart';
+import 'package:PiliPlus/pages/nostalgia/controller.dart';
 import 'package:PiliPlus/pages/rcmd/controller.dart';
+import 'package:PiliPlus/services/nostalgia_uploader_filter.dart';
+import 'package:PiliPlus/services/nostalgia_title_filter.dart';
 import 'package:PiliPlus/services/recommend_history.dart';
 import 'package:PiliPlus/utils/grid.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -137,8 +142,35 @@ class _RcmdPageState extends State<RcmdPage>
     };
   }
 
-  Widget _card(dynamic item, {required VoidCallback onRemove}) {
-    final card = VideoCardV(videoItem: item, onRemove: onRemove);
+  Widget _card(BaseRcmdVideoItemModel item, {required VoidCallback onRemove}) {
+    final uid = item.owner.mid;
+    final name = item.owner.name?.trim();
+    final feed = controller;
+    final card = VideoCardV(
+      videoItem: item,
+      onRemove: onRemove,
+      onNostalgiaDislike: feed is NostalgiaController ? () async {
+        try {
+          await NostalgiaTitleFilter.prependTitle(item.title);
+          feed.hideBlockedVideos();
+          SmartDialog.showToast('已加入怀旧推荐标题屏蔽词');
+        } catch (error) {
+          SmartDialog.showToast('保存标题屏蔽词失败：$error');
+        }
+      } : null,
+      onNostalgiaBlock: feed is NostalgiaController &&
+              uid != null && uid > 0 && name != null && name.isNotEmpty
+          ? () async {
+              try {
+                await NostalgiaUploaderFilter.add(uid, name);
+                feed.hideBlockedVideos();
+                SmartDialog.showToast('已加入怀旧模式 UP 主拦截列表');
+              } catch (error) {
+                SmartDialog.showToast('怀旧拉黑失败：$error');
+              }
+            }
+          : null,
+    );
     final account = controller.displayedAccount;
     if (!controller.supportsRecommendHistory ||
         !RecommendHistory.enabled ||

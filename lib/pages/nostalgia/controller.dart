@@ -7,6 +7,7 @@ import 'package:PiliPlus/models/model_rec_video_item.dart';
 import 'package:PiliPlus/pages/rcmd/controller.dart';
 import 'package:PiliPlus/services/nostalgia_list_service.dart';
 import 'package:PiliPlus/services/nostalgia_title_filter.dart';
+import 'package:PiliPlus/services/nostalgia_uploader_filter.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 
@@ -69,18 +70,32 @@ class NostalgiaController extends RcmdController {
       for (final video in videos) {
         if (video != null &&
             result.length < pageSize &&
-            titleFilter?.hasMatch(video.title) != true) {
+            titleFilter?.hasMatch(video.title) != true &&
+            !NostalgiaUploaderFilter.blocks(video.owner)) {
           result.add(video);
         }
       }
     }
 
     await GStorage.setting.put(SettingBoxKey.nostalgiaCursor, _cursor);
+    result.removeWhere(_isBlocked);
     return Success(result);
   }
 
   @override
   void handleListResponse(List dataList) {}
+
+  static bool _isBlocked(RcmdVideoItemModel video) =>
+      NostalgiaUploaderFilter.blocks(video.owner) ||
+      NostalgiaTitleFilter.pattern?.hasMatch(video.title) == true;
+
+  void hideBlockedVideos() {
+    final videos = loadingState.value.data;
+    if (videos == null || videos.isEmpty) return;
+    final count = videos.length;
+    videos.removeWhere((video) => _isBlocked(video as RcmdVideoItemModel));
+    if (videos.length != count) loadingState.refresh();
+  }
 
   @override
   Future<void> onRefresh() {

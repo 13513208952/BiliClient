@@ -26,11 +26,15 @@ import 'package:intl/intl.dart';
 class VideoCardV extends StatelessWidget {
   final BaseRcmdVideoItemModel videoItem;
   final VoidCallback? onRemove;
+  final VoidCallback? onNostalgiaBlock;
+  final VoidCallback? onNostalgiaDislike;
 
   const VideoCardV({
     super.key,
     required this.videoItem,
     this.onRemove,
+    this.onNostalgiaBlock,
+    this.onNostalgiaDislike,
   });
 
   Future<void> onPushDetail() async {
@@ -146,6 +150,8 @@ class VideoCardV extends StatelessWidget {
               iconSize: 17,
               videoItem: videoItem,
               onRemove: onRemove,
+              onNostalgiaBlock: onNostalgiaBlock,
+              onNostalgiaDislike: onNostalgiaDislike,
             ),
           ),
       ],

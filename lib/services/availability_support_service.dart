@@ -53,6 +53,9 @@ abstract final class AvailabilitySupportService {
   static Future<int?> importCandidates() =>
       _channel.invokeMethod<int>('importCandidates');
 
+  static Future<int> clearPending() async =>
+      (await _channel.invokeMethod<int>('clearPending'))!;
+
   static Future<int?> exportResults() =>
       _channel.invokeMethod<int>('exportResults');
 }

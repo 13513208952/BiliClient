@@ -28,12 +28,16 @@ class VideoPopupMenu extends StatelessWidget {
   final double menuItemHeight;
   final BaseSimpleVideoItemModel videoItem;
   final VoidCallback? onRemove;
+  final VoidCallback? onNostalgiaBlock;
+  final VoidCallback? onNostalgiaDislike;
 
   const VideoPopupMenu({
     super.key,
     required this.iconSize,
     required this.videoItem,
     this.onRemove,
+    this.onNostalgiaBlock,
+    this.onNostalgiaDislike,
     this.menuItemHeight = 45,
   });
 
@@ -55,7 +59,7 @@ class VideoPopupMenu extends StatelessWidget {
                     const Icon(CustomIcons.identifier_circle, size: 16),
                     () => Utils.copyText(videoItem.bvid!),
                   ),
-                  if (Accounts.main.isLogin)
+                  if (onNostalgiaDislike == null && Accounts.main.isLogin)
                     _VideoCustomAction(
                       '稍后再看',
                       const Icon(MdiIcons.clockTimeEightOutline, size: 16),
@@ -90,7 +94,7 @@ class VideoPopupMenu extends StatelessWidget {
                       },
                     ),
                 ],
-                if (videoItem is! SpaceArchiveItem) ...[
+                if (onNostalgiaDislike == null && videoItem is! SpaceArchiveItem) ...[
                   _VideoCustomAction(
                     '访问：${videoItem.owner.name}',
                     const Icon(MdiIcons.accountCircleOutline, size: 16),
@@ -305,6 +309,19 @@ class VideoPopupMenu extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (onNostalgiaDislike case final action?)
+                  _VideoCustomAction(
+                    '不感兴趣',
+                    const Icon(MdiIcons.thumbDownOutline, size: 16),
+                    action,
+                  ),
+                if (onNostalgiaBlock case final action?)
+                  _VideoCustomAction(
+                    '怀旧拉黑：${videoItem.owner.name}',
+                    const Icon(Icons.person_off_outlined, size: 16),
+                    action,
+                  ),
+                if (onNostalgiaDislike == null)
                 _VideoCustomAction(
                   "${MineController.anonymity.value ? '退出' : '进入'}无痕模式",
                   MineController.anonymity.value
@@ -321,7 +338,13 @@ class VideoPopupMenu extends StatelessWidget {
                     children: [
                       e.icon,
                       const SizedBox(width: 6),
-                      Text(e.title, style: const TextStyle(fontSize: 13)),
+                      Flexible(
+                        child: Text(
+                          e.title,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
                     ],
                   ),
                 ),
